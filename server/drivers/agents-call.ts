@@ -1098,6 +1098,9 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     });
     const nameLabel = typeof r.name === "string" ? r.name : "the skill";
     const warningText = Array.isArray(r.warnings) && r.warnings.length ? `\n\nScan warnings:\n- ${r.warnings.join("\n- ")}` : "";
+    if (r.state === "candidate" && typeof r.candidateId === "string" && !r.error) {
+      return { text: `Saved inactive learning candidate “${nameLabel}” (${r.candidateId}).${typeof r.summary === "string" ? `\n\n${r.summary}` : ""}${warningText}\n\nThe active skill is unchanged. The owner can define checks, verify pinned comparisons and run a trial in Bot settings → Skills → Learning. Do not claim the candidate improved task results or ask for a duplicate save.` };
+    }
     const completed = completedProposalResult(r, args.action === "update" ? `the update to skill “${nameLabel}”` : `the new skill “${nameLabel}”`);
     if (completed) return { ...completed, text: completed.text + warningText };
     const status = args.action === "update"

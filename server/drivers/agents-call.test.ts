@@ -250,3 +250,15 @@ describe("propose_team_memory", () => {
     } }]);
   });
 });
+
+it("reports an inactive learning candidate as saved, without claiming activation or asking for duplicate approval", async () => {
+  const result = await callTool("skill_manage", { action: "create", skill_md: "---\nname: report\ndescription: Write reports.\n---\n# Report\n", source: "conversation" }, context({ client: {
+    api: async () => ({ state: "candidate", name: "report", candidateId: "candidate-1", summary: "Saved inactive. Define task checks in Learning." }),
+    apiResponse: async () => ({ ok: true, status: 201, body: {} }),
+  } }));
+  expect(result.isError).not.toBe(true);
+  expect(result.text).toContain("Saved inactive");
+  expect(result.text).toContain("candidate-1");
+  expect(result.text).not.toContain("did not complete successfully");
+  expect(result.text).not.toContain("Applied");
+});

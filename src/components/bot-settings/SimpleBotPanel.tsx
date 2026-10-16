@@ -1,3 +1,4 @@
+import { LearningPanel } from "./LearningPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, FileText, Image as ImageIcon, Slack, Smartphone, X } from "lucide-react";
 
@@ -677,6 +678,7 @@ export function SimpleBotPanel({
               <div role="alert" className="mt-2 text-[12px] text-danger">{skills.error}</div>
             )}
             <p className="mt-3 text-[12.5px] leading-relaxed text-ink-secondary">{t("botSettings.simple.skillsHint", { name: bot.name })}</p>
+            <LearningPanel botId={bot.id} onSkillsChanged={() => skills.refresh()} />
           </div>
         )}
 

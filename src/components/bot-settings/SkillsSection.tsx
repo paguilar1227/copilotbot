@@ -1,3 +1,4 @@
+import { LearningPanel } from "./LearningPanel";
 import { BookOpen, Trash2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
@@ -380,6 +381,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <LearningPanel botId={bot.id} onSkillsChanged={() => refresh()} />
       <div className="rounded-xl bg-card p-4">
         <div className="flex items-center gap-2">
           <BookOpen size={16} className="text-ink-secondary" />

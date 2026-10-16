@@ -50,9 +50,10 @@ it("reviews a conversation in the background once its tool steps reach the thres
     expect((await messages(bot)).some((message) => message.card?.skillRequest)).toBe(false);
 
     await turn(bot, "Shorter please, five bullets at most.");
-    await expect.poll(async () => (await messages(bot)).find((message) => message.card?.skillRequest)?.card, { timeout: 20_000 })
-      .toMatchObject({ answered: "allow", autoApplied: true, title: 'Skill "weekly-report" enabled' });
-    expect((await api<{ text: string }>(`/api/bots/${bot.id}/skills/weekly-report`)).text).toContain("Keep it to five bullets.");
+    await expect.poll(async () => (await api(`/api/bots/${bot.id}/learning`)).candidates, { timeout: 20_000 })
+      .toEqual([expect.objectContaining({ name: "weekly-report", phase: "candidate", author: "background_review" })]);
+    expect((await messages(bot)).some(message => message.card?.skillRequest)).toBe(false);
+    expect((await api(`/api/bots/${bot.id}/skills/weekly-report`, "GET", undefined, 404)).error).toBeTruthy();
 
     const review = JSON.parse(readFileSync(join(scratch, "one-shot.json"), "utf8")) as { prompt: string };
     expect(review.prompt).toContain("Shorter please, five bullets at most.");
@@ -101,9 +102,10 @@ it("reviews a Codex bot's conversation through Codex's own background call", asy
     // Each fake Codex turn runs a command and a web search: two tool steps.
     await turn(bot, "Write the weekly report from the notes.");
     await turn(bot, "Shorter please, five bullets at most.");
-    await expect.poll(async () => (await messages(bot)).find((message) => message.card?.skillRequest)?.card, { timeout: 20_000 })
-      .toMatchObject({ answered: "allow", autoApplied: true, title: 'Skill "weekly-report" enabled' });
-    expect((await api<{ text: string }>(`/api/bots/${bot.id}/skills/weekly-report`)).text).toContain("Keep it to five bullets.");
+    await expect.poll(async () => (await api(`/api/bots/${bot.id}/learning`)).candidates, { timeout: 20_000 })
+      .toEqual([expect.objectContaining({ name: "weekly-report", phase: "candidate", author: "background_review" })]);
+    expect((await messages(bot)).some(message => message.card?.skillRequest)).toBe(false);
+    expect((await api(`/api/bots/${bot.id}/skills/weekly-report`, "GET", undefined, 404)).error).toBeTruthy();
     // SAFETY: the fake CLI appends exactly this shape, one object per line
     const review = readFileSync(textLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { argv: string[]; prompt: string })
       .find((call) => call.prompt.includes(SKILL_REVIEW_MARKER));

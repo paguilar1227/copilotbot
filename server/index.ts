@@ -398,6 +398,8 @@ import { createSkillsLibraryHost } from "./host/skills-library.ts";
 import { skillExport } from "./skill-export.ts";
 import { pickBotName } from "./names.ts";
 import { botSkillTemplateSchema, newBotDefaultsSchema } from "./new-bot-defaults.ts";
+import { createLearningHost } from "./copilotbot/learning-host.ts";
+import { learningRoutes } from "./copilotbot/learning-routes.ts";
 import { expandLearnTurnText, learnSource } from "./skill-learn.ts";
 import { connectedAppsForSetup, expandSetupTurnText, setupModeActive, setupSystemPrompt, type SetupConnectedApps } from "./setup-mode.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
@@ -5904,6 +5906,14 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
+const learningHost = createLearningHost(store);
+const learning = learningHost.learning;
+bus.subscribe((event: RuntimeEvent) => {
+  if (shouldIgnoreProviderEvent(event)) return;
+  try { learning.observe(event); }
+  catch (error) { console.warn(`learning: ${(error as Error).message}`); }
+});
+
 const skillReview = createSkillReview({
   enabled: () => skillReviewEnabled(cfg),
   threshold: () => skillReviewSteps(cfg),
@@ -5929,17 +5939,12 @@ const skillReview = createSkillReview({
     if (!bot) return { ok: false, error: "unknown bot" };
     const direct = appliesDirectly(botId, threadId, botId);
     if (!direct) return { ok: false, error: "this conversation cannot apply skill changes without review" };
-    if (change.action === "update" && skillsHost.editable(botId, change.name)) return skillsHost.applyReviewUpdate(bot, threadId, change, direct);
-    const staged = stageSkillWrite(botId, {
-      action: change.action,
-      targetName: change.action === "update" ? change.name : undefined,
-      files: [{ path: "SKILL.md", content: change.skillMd }],
-      gist: change.gist || undefined,
-      source: learnSource("automatic review of this conversation"),
-    });
-    if ("error" in staged) return { ok: false, error: staged.error };
-    const applied = applyOwnStagedSkill(bot, threadId, staged, direct);
-    return "error" in applied ? { ok: false, error: applied.error } : { ok: true };
+    try {
+      learningHost.propose(botId, threadId, { files: [{ path: "SKILL.md", content: change.skillMd }],
+        source: "automatic review of this conversation", gist: change.gist, author: "background_review",
+        ...(change.action === "update" ? { baseSha256: change.baseSha256, targetName: change.name } : {}) });
+      return { ok: true };
+    } catch (error) { return { ok: false, error: (error as Error).message }; }
   },
   statePath: join(DATA_DIR, "skill-review.json"),
   log: (line) => console.log(line),
@@ -8600,7 +8605,7 @@ async function startTurn(
       const sessionConfig = (soul: string | undefined) =>
         createHash("sha256").update(JSON.stringify([...persistentConfig, soul])).digest("hex").slice(0, 16);
       const plannedConfig = sessionConfig(bot.soul);
-      const skillAuthoring = skillAuthoringEnabled(cfg) && agentsMounted;
+      const skillAuthoring = skillAuthoringEnabled(cfg) && agentsMounted && !learning.pinned(bot.id, threadId);
       const skillCommandText = supportsWorkspaceFiles(instance.driverKind)
         ? expandSkillCommandTurnText(bot.id, providerText, skillsLibraryEnabled(cfg) ? (store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined)
         : providerText;
@@ -9107,7 +9112,8 @@ async function startTurn(
       }
       // The tool bridge is decided here: the folder the turn is launched in is known, and the prompt is not built yet.
       applyAgentsBridge(threadId, integrations, cfg, bot, turnEngine(instance, providerConfigs(), registry.lastSnapshot(instance.instanceId), cwd));
-      const prompt = buildSystemPrompt(persona, liveBot?.soul ?? bot.soul ?? "", [
+      const learningPinned = learning.pinned(bot.id, threadId);
+      let prompt = buildSystemPrompt(persona, liveBot?.soul ?? bot.soul ?? "", [
         { id: "user-profile", label: "About the user", text: userProfileSystemPrompt(cfg.profile) },
         { id: "setup", label: "Setup", text: setupSystemPrompt(setupMode, {
           skills: skillAuthoring,
@@ -9138,18 +9144,26 @@ async function startTurn(
         { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (integrations.agents ? TEAM_MEMORY_PROMPT : "") },
         // Volatile, so a teammate starting or finishing never changes the stable half.
         teamAvailabilityPart(coordinationPrompt ? sectionPeers : []),
-        { id: "recent", label: "Recent work", text: recentWorkPrompt(recentWork(recentWorkSources(bot), bot, { userName: cfg.profile?.name?.trim() || "User", currentThreadId: threadId, ...recentWorkFilter() })) },
+        { id: "recent", label: "Recent work", text: learningPinned ? "" : recentWorkPrompt(recentWork(recentWorkSources(bot), bot, { userName: cfg.profile?.name?.trim() || "User", currentThreadId: threadId, ...recentWorkFilter() })) },
         { id: "memory", label: "Memory", text: memorySystemPrompt(bot.id, { managedWrites: Boolean(integrations.agents), fileTools: worksInWorkspace, enabled: bot.memoryEnabled !== false, writesRefused: notesRefused }) },
         // liveBot predates awaited setup work; an assignment PUT in that window must still reach this prompt.
-        { id: "skills", label: "Skills index", text: privateWorkspace ? skillsSystemPrompt(bot.id, skillsHost.conversationSkills(store.bot(bot.id) ?? bot, threadId), skillsHost.conversationStartedAt(threadId)) : "" },
+        { id: "skills", label: "Skills index", text: privateWorkspace && !learningPinned ? skillsSystemPrompt(bot.id, skillsHost.conversationSkills(store.bot(bot.id) ?? bot, threadId), skillsHost.conversationStartedAt(threadId)) : "" },
         { id: "skill-instructions", label: "Skill instructions", text: skillInstructions },
         { id: "playbooks", label: "Playbooks", text: packagePlaybooks },
         { id: "webhook", label: "Webhook provenance", text: opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },
         { id: "mentions", label: "Mentions", text: tagged.length ? `The user named these existing teammates: ${tagged.map(b => `${peerName(b.name)} (${b.id})`).join(", ")}. Use coordinate_bots when their contribution is needed; do not substitute native helper agents for these bots.` : "" },
       ], integrations.agents, { replyStyle: liveBot?.replyStyle ?? bot.replyStyle });
+      const learningPrompt = !opts?.cardContinuation && !opts?.unattended && !opts?.automationSource && !commsDepth && !notesRefused
+        ? learning.prepare(bot.id, threadId, { text: resolvedImages.text,
+          runtime: process.env.OMB_TEST_SEALED_PATH === "1" || JSON.stringify(providerConfigs()[instanceId]).includes("/testing/fake-") ? "fixture" : "live",
+          context: { model: { instanceId, model, effort, variant }, driver: instance.driverKind, cwd,
+            tools: toolScope, integrations: Object.keys(integrations).sort(), computer: computerKind,
+            system: prompt.text.replaceAll(threadId, "<evaluation-thread>") },
+        }) : "";
+      if (learningPrompt) prompt = { ...prompt, text: prompt.text + learningPrompt, stable: prompt.stable + learningPrompt };
       turnPromptBytes.set(threadId, { stable: Buffer.byteLength(prompt.stable), volatile: Buffer.byteLength(prompt.volatile) });
       // Recall rides in front of this turn's message, never the system prompt, whose volatile half is re-sent whole on any change.
-      const recalled = autoRecallPrompt(bot, threadId, resolvedImages.text, {
+      const recalled = learningPinned ? "" : autoRecallPrompt(bot, threadId, resolvedImages.text, {
         // A routine run starts fresh, and a webhook is untrusted: neither pulls earlier conversations in.
         conversations: commsDepth === 0 && !coordinationNode && !opts?.automationSource && !opts?.unattended,
         userName: cfg.profile?.name?.trim() || "User",
@@ -13662,6 +13676,7 @@ ROUTES.push(createBotLifecycleRoutes({
   store, routines: () => routines, interruptAllDirectThreads, cancelDirectTurnDispatch, revokeInternalCapabilitiesForThread,
   activeGroupTurnForBot, cancelGroupTurnOperations, runningTurnInstance, closeOpenApprovals, deleteBotWithLifecycle,
 }));
+ROUTES.push(learningRoutes(store, learning));
 ROUTES.push(createBotSkillsRoutes({ store, cfg, listBotSkills, readBotSkillFile, stagedSkillListing }));
 ROUTES.push(createHighLevelRoutes({ service: highlevel }));
 ROUTES.push(createSkillShareRoutes({ enabled: () => skillsHost.mode() !== "off", botExists: (id) => Boolean(store.bot(id)),
@@ -15238,6 +15253,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         }
         const references = parseSkillManageReferences(body.references);
         if ("error" in references) return json(res, 400, references);
+        if (learningHost.explicit(fromThreadId)) {
+          if (!direct) return json(res, 403, { error: "Learning candidates require an owner-controlled private conversation." });
+          try {
+            const candidate = learningHost.propose(from.id, fromThreadId, { files: [{ path: "SKILL.md", content: skillMd }, ...references],
+              source, gist: typeof body.gist === "string" ? body.gist : "Explicit learning", author: "explicit_learning",
+              ...(action === "update" ? { targetName } : {}) });
+            skillReview.noteSkillChange(from.id, fromThreadId);
+            return json(res, 201, { state: "candidate", candidateId: candidate.id, name: candidate.name,
+              summary: "Saved inactive. Define task checks and verify current/candidate runs in Skills → Learning before activation." });
+          } catch (error) { return json(res, 422, { error: (error as Error).message }); }
+        }
         if (action === "update" && skillsHost.editable(from.id, targetName)) return references.length ? json(res, 400, { error: "A skill shared through the team library cannot keep reference files yet; put that guidance in SKILL.md." }) : json(res, ...skillsHost.harnessUpdate(from, fromThreadId, targetName, skillMd, body.gist, body.base_revision, direct));
         const staged = stageSkillWrite(from.id, {
           action,

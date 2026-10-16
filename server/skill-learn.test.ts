@@ -36,13 +36,9 @@ describe("expandLearnTurnText", () => {
         expect(expanded.startsWith(LEARN_PROMPT_MARKER)).toBe(true);
         expect(expanded).toContain("the REST client in ~/sdk");
         expect(expanded).toContain("skill_manage");
-        expect(expanded).toContain("current version untouched");
-        expect(expanded).toContain("After an applied result, continue the requested work without another confirmation");
-        expect(expanded).toContain("If review is pending, a create stays inactive");
-        expect(expanded).toContain("end the turn and wait for the in-app decision");
-        expect(expanded).toContain("Never claim success from the permission mode alone");
-        expect(expanded).not.toContain("only STAGES");
-        expect(expanded).not.toContain("stage it for their review");
+        expect(expanded).toContain("inactive learning candidate");
+        expect(expanded).toContain("verifies a trial before activation");
+        expect(expanded).toContain("mock run");
         expect(expanded).toContain('source as the exact URL or folder');
         expect(expanded).toContain('action="update"');
         expect(expanded).toContain("explicitly asked to revise");
