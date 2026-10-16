@@ -23,6 +23,7 @@ export const azureConfigSchema = z.object({
   resourceGroup: name.optional(),
   resourceName: name.optional(),
   models: z.array(name.min(1)).optional(),
+  liveDeployment: name.optional(),
   realtimeDeployment: name.optional(),
   transcriptionDeployment: name.optional(),
   ttsDeployment: name.optional(),

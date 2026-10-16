@@ -62,10 +62,11 @@ export function azureDeviceSignIn(config: AzureConfig, runner?: AzureRunner): De
   };
 }
 
-export interface AzureDeployment { name: string; model: string; type: 'chat' | 'realtime' | 'tts' | 'transcription' | 'other' }
+export interface AzureDeployment { name: string; model: string; type: 'chat' | 'live' | 'realtime' | 'tts' | 'transcription' | 'other' }
 export function deploymentType(model: string): AzureDeployment['type'] {
   if (/tts|text-to-speech/i.test(model)) return 'tts';
   if (/transcribe|whisper|realtime-translate/i.test(model)) return 'transcription';
+  if (/^gpt-live-\d/i.test(model)) return 'live';
   if (/realtime/i.test(model)) return 'realtime';
   if (/embedding|image|flux|sora|dall-e|speech|audio/i.test(model)) return 'other';
   return 'chat';

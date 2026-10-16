@@ -57,6 +57,9 @@ await build({
   platform: "node",
   target: "node20",
   format: "esm",
+  // The Azure voice transport uses the existing ws package, whose bundled CJS
+  // requires Node built-ins. Keep those built-in imports valid in the ESM bundle.
+  banner: { js: 'import { createRequire as __copilotbotCreateRequire } from "node:module"; const require = __copilotbotCreateRequire(import.meta.url);' },
   outbase: server,
   outdir: join(root, "dist-server"),
   // Written after tsc, replacing its output for these entry points.

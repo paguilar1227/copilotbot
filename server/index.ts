@@ -324,6 +324,7 @@ import { createDecider, deciderReady, describeDecider } from "./decider/index.ts
 import { decideRoomResponder, type RoomRoutingInput } from "./decider/room-routing.ts";
 import { azureSettings } from "../shared/copilotbot.ts";
 import { createAzureLiveSession } from "./copilotbot/azure-live.ts";
+import { createAzureGptLiveSession } from "./copilotbot/azure-gpt-live.ts";
 import { azureRoutes } from "./copilotbot/azure-routes.ts";
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
@@ -13945,7 +13946,7 @@ const liveCalls = new LiveCallController({
   pro: () => proPlan.liveCallsAllowed(),
   settings: () => ({ key: cfg.live?.key ?? "", ...liveSettingsFor(cfg) }),
   createSession: ({ key, sdp, botId, threadId, voice }) => cfg.live?.provider === "azure"
-    ? createAzureLiveSession({ config: { ...cfg.azure }, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId) })
+    ? (cfg.azure?.liveDeployment ? createAzureGptLiveSession : createAzureLiveSession)({ config: { ...cfg.azure }, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId) })
     : createLiveSession({ key, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId), cloudHome: Boolean(CLOUD_HOME) }),
   // Node's WebSocket (undici) accepts headers in its second argument.
   openSocket: (url, key) => new WebSocket(url, { headers: { authorization: `Bearer ${key}` } } as unknown as string[]) as unknown as LiveSocket,

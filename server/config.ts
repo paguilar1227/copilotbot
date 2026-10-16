@@ -644,7 +644,7 @@ export function liveSettingsFor(cfg: AppConfig): LiveSettings {
   const minutes = cfg.live?.idleMinutes;
   return {
     provider: cfg.live?.provider ?? "openai",
-    configured: cfg.live?.provider === "azure" ? Boolean(azureSettings(cfg.azure).configured && cfg.azure?.realtimeDeployment && cfg.azure?.transcriptionDeployment) : Boolean(cfg.live?.key?.trim()),
+    configured: cfg.live?.provider === "azure" ? Boolean(azureSettings(cfg.azure).configured && (cfg.azure?.liveDeployment || (cfg.azure?.realtimeDeployment && cfg.azure?.transcriptionDeployment))) : Boolean(cfg.live?.key?.trim()),
     voice: cfg.live?.voice ?? "",
     readTypedReplies: cfg.live?.readTypedReplies ?? true,
     idleMinutes: Number.isInteger(minutes) && minutes! >= 1 && minutes! <= 60 ? minutes! : LIVE_IDLE_MINUTES_DEFAULT,

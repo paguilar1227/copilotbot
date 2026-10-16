@@ -70,11 +70,11 @@ export function AzureSettings({ onSaved }: { onSaved?: () => void }) {
       {(['tenant', 'subscription', 'resourceGroup', 'resourceName'] as const).map(field => <label key={field} className="block text-[12px]">{field}<input className={inputClass} value={draft[field] ?? ''} onChange={e => patch({ [field]: e.target.value })} /></label>)}
     </details>
     <label className="block text-[12px]">Chat deployments (comma separated)<input aria-label="Azure chat deployments" className={inputClass} value={modelsText} onChange={e => setModelsText(e.target.value)} placeholder="my-chat-deployment" /></label>
-    {(['realtimeDeployment', 'transcriptionDeployment', 'ttsDeployment'] as const).map((field, index) => <label key={field} className="block text-[12px]">{['Live Realtime deployment', 'Live transcription deployment', 'Text-to-speech deployment'][index]}
-      <input aria-label={['Live Realtime deployment', 'Live transcription deployment', 'Text-to-speech deployment'][index]} className={inputClass} value={draft[field] ?? ''} onChange={e => patch({ [field]: e.target.value })} list={`azure-${field}`} />
-      <datalist id={`azure-${field}`}>{deployments.filter(d => d.type === ['realtime', 'transcription', 'tts'][index]).map(d => <option key={d.name} value={d.name} />)}</datalist>
+    {(['liveDeployment', 'realtimeDeployment', 'transcriptionDeployment', 'ttsDeployment'] as const).map((field, index) => <label key={field} className="block text-[12px]">{['GPT-Live deployment', 'Alternative Realtime deployment', 'Realtime transcription deployment', 'Text-to-speech deployment'][index]}
+      <input aria-label={['GPT-Live deployment', 'Alternative Realtime deployment', 'Realtime transcription deployment', 'Text-to-speech deployment'][index]} className={inputClass} value={draft[field] ?? ''} onChange={e => patch({ [field]: e.target.value })} list={`azure-${field}`} />
+      <datalist id={`azure-${field}`}>{deployments.filter(d => d.type === ['live', 'realtime', 'transcription', 'tts'][index]).map(d => <option key={d.name} value={d.name} />)}</datalist>
     </label>)}
-    <p className="text-[12px] text-ink-secondary">Live calls require a conversational Realtime deployment plus a transcription deployment. A transcription-only or translation model cannot hold a Live conversation.</p>
+    <p className="text-[12px] text-ink-secondary">Use a GPT-Live deployment for Live calls. Alternatively, use a conversational Realtime deployment plus a transcription deployment. GPT-Live includes its own transcription.</p>
     <div className="flex flex-wrap gap-2"><button className={buttonClass} disabled={busy} onClick={() => void run(() => save())}>{busy ? 'Saving…' : 'Save Azure settings'}</button>
       <button className={buttonClass} disabled={busy} onClick={() => void run(async () => { await save(); const result = await api<{ deployments: Deployment[] }>('/api/copilotbot/azure/deployments'); setDeployments(result.deployments); setMessage(`${result.deployments.length} deployments found.`); })}>Refresh deployments</button></div>
     {message && <p role="status" className="text-[12px] text-success">{message}</p>}

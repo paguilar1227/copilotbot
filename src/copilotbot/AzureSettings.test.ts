@@ -32,3 +32,26 @@ it('allows typing multiple deployment names before saving', async () => {
     host.remove();
   }
 });
+
+it('saves a GPT-Live deployment independently of Realtime and TTS', async () => {
+  fixture.api.mockClear();
+  fixture.api.mockResolvedValue({ azure: { auth: 'api-key', endpoint: 'https://fixture.openai.azure.com', configured: true } });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(AzureSettings)));
+    const input = host.querySelector<HTMLInputElement>('[aria-label="GPT-Live deployment"]')!;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { set.call(input, 'gpt-live-1'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    const save = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save Azure settings')!;
+    await act(async () => save.click());
+    const saved = JSON.parse(fixture.api.mock.calls[0]![1].body).azure;
+    expect(saved.liveDeployment).toBe('gpt-live-1');
+    expect(saved.realtimeDeployment).toBeUndefined();
+    expect(saved.ttsDeployment).toBeUndefined();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

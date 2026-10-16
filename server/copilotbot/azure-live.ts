@@ -2,9 +2,10 @@ import { azureEndpoint, type AzureConfig } from '../../shared/copilotbot.ts';
 import { azureCredential } from './azure-auth.ts';
 import { liveInstructions, liveInitialInput, LiveSessionError, MAX_SDP_BYTES, type LiveBot, type LiveHistoryMessage } from '../live-call.ts';
 import type { LiveSocket } from '../live-call-controller.ts';
+import { openAzureSocket, type AzureSocketFactory } from './azure-socket.ts';
+export type { AzureSocketFactory } from './azure-socket.ts';
 
 type Event = Record<string, any>;
-export type AzureSocketFactory = (url: string, headers: Record<string, string>) => LiveSocket;
 
 /** Azure Realtime's function calls and audio transcription mapped to the Live controller contract. */
 export class AzureLiveSocket implements LiveSocket {
@@ -172,7 +173,7 @@ export async function createAzureLiveSession(input: {
   }
   const sessionId = url.pathname.split('/').at(-1)!;
   const attach = `${endpoint.replace(/^https:/, 'wss:')}/openai/v1/realtime?call_id=${encodeURIComponent(sessionId)}`;
-  const factory: AzureSocketFactory = input.socketFactory ?? ((address, auth) => new WebSocket(address, { headers: auth } as unknown as string[]) as unknown as LiveSocket);
+  const factory = input.socketFactory ?? openAzureSocket;
   return { sessionId, sdp, openSocket: () => new AzureLiveSocket(factory(attach, headers), async () => {
     const result = await request(`${url.href}/hangup`, { method: 'POST', redirect: 'error', headers: await credential.headers(true), signal: AbortSignal.timeout(5_000) });
     await result.body?.cancel();

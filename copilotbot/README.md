@@ -24,7 +24,7 @@ Open Settings → API keys → Azure Foundry. Choose Microsoft Entra ID or an Az
 
 **Find my Azure resources** lists existing resources. Select a resource, refresh deployments, and choose the deployment names for chat, conversational Realtime, transcription, and TTS. Deployment discovery uses Azure management permissions; if those are unavailable, enter deployment names manually. No resource, deployment, role assignment, or subscription is created by setup.
 
-Choose **Azure Foundry** in the Live call settings or voice engine settings. Chat, Live, and TTS share the Azure connection but use their own deployment names. Live requires a conversational Realtime deployment; `gpt-realtime-whisper` and translation-only models cannot serve that role. TTS uses the Azure OpenAI-compatible audio speech endpoint.
+Choose **Azure Foundry** in the Live call settings or voice engine settings. Chat, Live, and TTS share the Azure connection but use their own deployment names. Set **GPT-Live deployment** for native full-duplex calls through Azure's `/openai/v1/live` API. This takes priority over the alternative Realtime deployment and includes transcription. Alternatively, configure a conversational Realtime deployment and a transcription deployment. `gpt-realtime-whisper` and translation-only models cannot hold a Live conversation. TTS uses the Azure OpenAI-compatible audio speech endpoint.
 
 References: [Azure Realtime WebRTC](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/realtime-audio-webrtc), [Azure audio API](https://learn.microsoft.com/en-us/azure/foundry/openai/reference-preview), [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli).
 
