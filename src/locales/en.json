@@ -4551,5 +4551,21 @@
   "apiInstances.remove": "Remove {name}",
   "apiInstances.refreshModels": "Detect models for {name} again",
   "apiInstances.empty": "No other servers yet.",
-  "apiInstances.failed": "Couldn't save the server. Check the fields and try again."
+  "apiInstances.failed": "Couldn't save the server. Check the fields and try again.",
+  "copilot.setup.description": "Use your GitHub Copilot subscription. Sign in with a one-time device code.",
+  "copilot.setup.start": "Set up Copilot",
+  "copilot.setup.enterCode": "Enter this code on the Copilot sign-in page:",
+  "copilot.setup.open": "Open Copilot sign-in",
+  "copilot.setup.security": "The Copilot CLI keeps your sign-in in its own credential store.",
+  "copilot.setup.connected": "Copilot connected",
+  "copilot.setup.failed": "Copilot sign-in did not finish. Try again.",
+  "copilot.setup.invalidChallenge": "The sign-in page or code was not valid. Start again.",
+  "azure.setup.description": "Sign in with your Microsoft Entra account using Azure CLI. No API key is required.",
+  "azure.setup.start": "Sign in with Microsoft",
+  "azure.setup.enterCode": "Enter this code on the Microsoft sign-in page:",
+  "azure.setup.open": "Open Microsoft sign-in",
+  "azure.setup.security": "Azure CLI keeps the sign-in on this computer. Access tokens are refreshed when needed.",
+  "azure.setup.connected": "Microsoft connected",
+  "azure.setup.failed": "Microsoft sign-in did not finish. Try again.",
+  "azure.setup.invalidChallenge": "The sign-in page or code was not valid. Start again."
 }

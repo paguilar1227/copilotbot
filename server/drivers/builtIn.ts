@@ -1,3 +1,5 @@
+import { AzureFoundryDriver } from '../copilotbot/azure-driver.ts';
+import { CopilotDriver } from '../copilotbot/copilot.ts';
 import type { AnyProviderDriver } from "../contracts.ts";
 import { AntigravityDriver } from "./antigravity.ts";
 import { ClaudeDriver } from "./claude.ts";
@@ -23,6 +25,8 @@ import { MuseCodeDriver } from "./muse-code.ts";
 import { MinimaxDriver } from "./minimax.ts";
 
 export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
+  CopilotDriver,
+  AzureFoundryDriver,
   GrokDriver,
   GrokAgentDriver,
   GeminiAgentDriver,

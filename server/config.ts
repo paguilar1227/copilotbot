@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import { azureConfigSchema, azureSettings, type AzureConfig } from "../shared/copilotbot.ts";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
@@ -343,6 +344,7 @@ const appConfigSchema = z.object({
   /** Anthropic API key for Claude Code billed per token; `url` is for a proxy or test double. Never a login OAuth token. */
   anthropic: z.object({ key: optionalText, url: optionalText, everyClaudeBot: z.boolean().optional() }).optional(),
   /** OpenAI API key for the `openai` instance only; Codex keeps its own login. */
+  azure: azureConfigSchema.optional(),
   openai: z.object({ key: optionalText }).optional(),
   /** OpenRouter key, for the `openrouter` instance only. */
   openrouter: z.object({ key: optionalText }).optional(),
@@ -384,7 +386,7 @@ const appConfigSchema = z.object({
     key: optionalText,
     fishKey: optionalText,
     voice: optionalText,
-    provider: z.enum(["elevenlabs", "fish", "system", "chatterbox", "xai"]).optional(),
+    provider: z.enum(["elevenlabs", "fish", "system", "chatterbox", "xai", "azure"]).optional(),
     baseUrl: z
       .string()
       .trim()
@@ -397,6 +399,7 @@ const appConfigSchema = z.object({
   decider: deciderConfigSchema.optional(),
   /** Live calls: a GPT-Live OpenAI project key kept apart from every other OpenAI key; `voice` is a GPT-Live voice. */
   live: z.object({
+    provider: z.enum(["openai", "azure"]).optional(),
     key: optionalText,
     voice: z.string().trim().max(40).regex(/^[a-z]*$/, "a Live voice is a lowercase built-in voice name").optional(),
     readTypedReplies: z.boolean().optional(),
@@ -489,6 +492,7 @@ export interface AppConfig extends HelperConfig {
   meta?: { key?: string; url?: string };
   /** `everyClaudeBot`: the key runs every Claude bot instead of its login; unset means true. */
   anthropic?: { key?: string; url?: string; everyClaudeBot?: boolean };
+  azure?: AzureConfig;
   openai?: { key?: string };
   openrouter?: { key?: string };
   budgets?: { monthlyUsd?: number; warnAtPercent?: number };
@@ -503,10 +507,10 @@ export interface AppConfig extends HelperConfig {
   /** A named host from the user's SSH config. Authentication stays with SSH. */
   vps?: { sshAlias?: string };
   opencodeGo?: { apiKey?: string; providerKeys?: Record<string, string> };
-  tts?: { key?: string; fishKey?: string; voice?: string; provider?: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai"; baseUrl?: string; model?: string; fishModel?: FishTtsModel };
+  tts?: { key?: string; fishKey?: string; voice?: string; provider?: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai" | "azure"; baseUrl?: string; model?: string; fishModel?: FishTtsModel };
   decider?: DeciderConfig;
   imageGen?: ImageGenerationConfig;
-  live?: { key?: string; voice?: string; readTypedReplies?: boolean; idleMinutes?: number };
+  live?: { provider?: "openai" | "azure"; key?: string; voice?: string; readTypedReplies?: boolean; idleMinutes?: number };
   profile?: { name?: string; email?: string; aboutMe?: string };
   rooms?: { turnTimeoutMinutes: number };
   mcp?: { callTimeoutMinutes?: number };
@@ -639,7 +643,8 @@ export const LIVE_IDLE_MINUTES_DEFAULT = 5;
 export function liveSettingsFor(cfg: AppConfig): LiveSettings {
   const minutes = cfg.live?.idleMinutes;
   return {
-    configured: Boolean(cfg.live?.key?.trim()),
+    provider: cfg.live?.provider ?? "openai",
+    configured: cfg.live?.provider === "azure" ? Boolean(azureSettings(cfg.azure).configured && cfg.azure?.realtimeDeployment && cfg.azure?.transcriptionDeployment) : Boolean(cfg.live?.key?.trim()),
     voice: cfg.live?.voice ?? "",
     readTypedReplies: cfg.live?.readTypedReplies ?? true,
     idleMinutes: Number.isInteger(minutes) && minutes! >= 1 && minutes! <= 60 ? minutes! : LIVE_IDLE_MINUTES_DEFAULT,
@@ -833,6 +838,8 @@ export function loadConfig(): AppConfig {
   cfg.decider = { ...cfg.decider };
   if (process.env.OMB_JEV_API_KEY !== undefined) cfg.decider.key = process.env.OMB_JEV_API_KEY;
   if (process.env.OMB_OPENROUTER_DECIDER_KEY !== undefined) cfg.decider.openrouterKey = process.env.OMB_OPENROUTER_DECIDER_KEY;
+  cfg.azure = { ...cfg.azure };
+  if (process.env.COPILOTBOT_AZURE_KEY !== undefined) cfg.azure.key = process.env.COPILOTBOT_AZURE_KEY;
   cfg.live = { ...cfg.live };
   if (process.env.OMB_OPENAI_LIVE_KEY !== undefined) cfg.live.key = process.env.OMB_OPENAI_LIVE_KEY;
   cfg.imageGen = { ...cfg.imageGen };
@@ -886,6 +893,7 @@ export function syncCredentialEnv(patch: Partial<Omit<AppConfig, "threads" | "ne
     [patch.imageGen?.key, "OMB_OPENAI_IMAGE_KEY"],
     [patch.imageGen?.customApiKey, "OMB_CUSTOM_IMAGE_KEY"],
     [patch.live?.key, "OMB_OPENAI_LIVE_KEY"],
+    [patch.azure?.key, "COPILOTBOT_AZURE_KEY"],
   ];
   for (const [value, name] of secrets) {
     if (value === undefined) continue;
@@ -929,6 +937,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   "OMB_OPENAI_IMAGE_KEY",
   "OMB_CUSTOM_IMAGE_KEY",
   "OMB_OPENAI_LIVE_KEY",
+  "COPILOTBOT_AZURE_KEY",
   "COMPOSIO_API_KEY",
   "OMB_COMPOSIO_BROKER_TOKEN",
   "OMB_CLOUD_BOAT_TOKEN",
@@ -1065,7 +1074,7 @@ export function saveConfig(
   const before = configSaveListeners.size ? structuredClone(disk) : disk;
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine", "newBots", "safetyFloor"] as const) {
+  for (const key of ["azure", "xai", "anthropic", "mistral", "cerebras", "groq", "meta", "openai", "openrouter", "openaiCompat", "composio", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine", "newBots", "safetyFloor"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);
@@ -1323,6 +1332,8 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
   // Google retired Gemini CLI for the free/Pro/Ultra tiers on 2026-06-18; enterprise licences restore it with
   // `{"instances": {"gemini": {"driver": "geminiAgent"}}}`.
   const DEFAULT_FLEET: InstanceConfigMap = {
+    azure: { driver: "azureFoundry" },
+    copilot: { driver: "copilotAgent" },
     grok: { driver: "grokAgent" },
     kimi: { driver: "kimiAgent" },
     droid: { driver: "droidAgent" },
@@ -1351,6 +1362,8 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     pi: { driver: "piAgent" },
   } as const;
   const PRODUCT_FLEET_ADDITIONS = {
+    azure: { driver: "azureFoundry" },
+    copilot: { driver: "copilotAgent" },
     chatgpt: { driver: "codex", displayName: "ChatGPT plan", config: { authMode: "chatgpt-plan" } },
     cursor: { driver: "cursorAgent" },
     openaiCompat: { driver: "openai-compat" },
@@ -1371,6 +1384,11 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     for (const [id, entry] of Object.entries(PRODUCT_FLEET_ADDITIONS)) {
       if (!Object.hasOwn(map, id)) map[id] = { ...entry };
     }
+  }
+  if (map.azure?.driver === 'azureFoundry') {
+    const { key, ...settings } = cfg.azure ?? {};
+    map.azure = { ...map.azure, config: { ...settings, ...map.azure.config as object },
+      environment: { ...map.azure.environment, ...(key ? { COPILOTBOT_AZURE_KEY: key } : {}) } };
   }
   // Re-applied on every load so the openai/openrouter instances never fall back to the shared key and URL.
   for (const [id, builtIn] of Object.entries(API_KEY_FLEET)) {

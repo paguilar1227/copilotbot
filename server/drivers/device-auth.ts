@@ -40,7 +40,7 @@ export interface DeviceSignIn {
   /** Checked before a sign-in, so a working one is never replaced, and after it to confirm. */
   status?: { args: readonly string[]; read(code: number | null, output: string): DeviceSignInState };
   /** Without a status command: whether the sign-in a turn uses is now there. */
-  signedIn?(env: Env): boolean;
+  signedIn?(env: Env): boolean | Promise<boolean>;
   logoutArgs?: readonly string[];
 }
 
@@ -217,9 +217,10 @@ export class DeviceAuthController {
       this.run(flow, [...status.args], env, home, (code, output) => done(status.read(code, output) === "signed-in"));
       return;
     }
-    let signedIn = false;
-    try { signedIn = this.spec.signedIn?.(env) === true; } catch {}
-    done(signedIn);
+    void Promise.resolve().then(() => this.spec.signedIn?.(env)).then(
+      signedIn => { if (flow.status.phase === 'waiting') done(signedIn === true); },
+      () => { if (flow.status.phase === 'waiting') done(false); },
+    );
   }
 
   private startFailure(error: NodeJS.ErrnoException): string {

@@ -99,9 +99,11 @@ interface RuntimeOptions<Config> {
   input: DriverCreateInput<Config>;
   driverKind: string;
   apiKey: string;
+  headers?: () => Promise<Record<string, string>>;
+  effortLevels?: readonly import("../contracts.ts").EffortLevel[];
   apiUrl: string;
   models: () => ModelCatalog;
-  requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean): Record<string, unknown>;
+  requestBody(model: string, messages: OpenAIChatMessage[], stream: boolean, effort?: SendTurnInput["effort"]): Record<string, unknown>;
   httpErrorLabel: string;
   missingKeyError: string;
   unavailableReason: string;
@@ -298,6 +300,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     onDelta?: (delta: string, kind: "assistant_text" | "reasoning_text") => void,
     tools: ChatToolDefinition[] = [],
     onUsage?: TextGenerationOptions["onUsage"],
+    effort?: SendTurnInput["effort"],
   ): Promise<Completion> => {
     const timeoutController = new AbortController();
     let idleTimer: NodeJS.Timeout | null = null;
@@ -315,18 +318,21 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         ? AbortSignal.any([signal, timeoutController.signal])
         : timeoutController.signal;
 
+      const requestHeaders = options.headers ? await options.headers() : { authorization: `Bearer ${options.apiKey}` };
       const response = await fetch(`${options.apiUrl}/chat/completions`, {
         method: "POST",
         ...(messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image_url")) ? { redirect: "error" as const } : {}),
-        headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json" },
+        headers: { ...requestHeaders, "content-type": "application/json" },
+        redirect: "error",
         body: JSON.stringify({
-          ...options.requestBody(model, messages, stream),
+          ...options.requestBody(model, messages, stream, effort),
           ...(tools.length ? { tools } : {}),
         }),
         signal: activeSignal,
       });
       if (!response.ok) {
-        const body = await response.text().catch(() => "");
+        let body = await response.text().catch(() => "");
+        for (const secret of Object.values(requestHeaders)) if (secret) body = body.split(secret).join("[redacted]").split(secret.replace(/^Bearer /, "")).join("[redacted]");
         if (rejectsKey(response.status, body)) noteKeyRejected(options.apiUrl, options.apiKey);
         const message = `${options.httpErrorLabel} HTTP ${response.status}${body ? `: ${httpErrorDetail(body)}` : ""}`;
         if (rejectsToolsParameter(response.status, body)) throw new UnsupportedChatToolsError(message);
@@ -508,7 +514,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
   };
 
   const sendTurn = async (turn: SendTurnInput) => {
-    if (!options.apiKey) throw new Error(options.missingKeyError);
+    if (!options.apiKey && !options.headers) throw new Error(options.missingKeyError);
     if (active.has(turn.threadId)) throw new Error("a turn is already running on this thread");
     if (options.computerUse && (turn.images?.length || turn.integrations?.localComputer || turn.integrations?.browser)) assertImageTransport(options.apiUrl);
 
@@ -633,7 +639,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 streamed = true;
                 if (streamKind === "assistant_text") answerStreamed = true;
                 delta(text, streamKind);
-              }, tools.definitions);
+              }, tools.definitions, undefined, turn.effort);
               delta("", "assistant_text", true);
               delta("", "reasoning_text", true);
               break;
@@ -856,7 +862,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     },
     ...(options.refreshModels ? { refreshModels: options.refreshModels } : {}),
     snapshot: async () => {
-      if (!options.apiKey) return { state: "unavailable", reason: options.unavailableReason };
+      if (!options.apiKey && !options.headers) return { state: "unavailable", reason: options.unavailableReason };
       if (keyRejected(options.apiUrl, options.apiKey)) return { state: "available", authenticated: false, reason: KEY_REJECTED_REASON, version: null };
       return { state: "available", authenticated: true, version: null, ...(options.billing ? { billing: options.billing } : {}) };
     },
@@ -865,6 +871,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       capabilities: { ...(options.computerUse ? { computerMcp: options.tools !== false,
         localComputerMcp: options.tools !== false,
         browserMcp: options.tools !== false, nativeImageInput: true, images: true } : {}),
+        effortLevels: options.effortLevels,
         sessionModelSwitch: "in-session", customMcp: options.tools !== false, agentsMcp: options.tools !== false, composioMcp: options.tools !== false,
         dataMcp: options.tools !== false,
         highlevelMcp: options.tools !== false,

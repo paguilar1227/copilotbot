@@ -5,6 +5,7 @@ import type { ModelSelection } from "./store";
 
 /** GET /api/config — configured flags only; secrets are never echoed. */
 export interface ConfigStatus {
+  azure?: import("../../shared/copilotbot").AzureSettings;
   xai?: { configured: boolean };
   mistral?: { configured: boolean };
   cerebras?: { configured: boolean };
@@ -53,7 +54,7 @@ export interface ConfigStatus {
     configured: boolean;
     ready: boolean;
     voice: string;
-    provider?: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai";
+    provider?: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai" | "azure";
     baseUrl?: string;
     model?: string;
     /** Fish Audio speech model; present only while Fish is the provider. */

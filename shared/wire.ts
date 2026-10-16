@@ -640,6 +640,7 @@ export interface LiveCallRecord {
 
 /** Non-secret Live settings, as GET /api/config and PATCH /api/live/settings report them. */
 export interface LiveSettings {
+  provider?: "openai" | "azure";
   configured: boolean;
   voice: string;
   readTypedReplies: boolean;

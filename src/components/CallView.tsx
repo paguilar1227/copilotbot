@@ -290,6 +290,7 @@ export function CallTargetButton({
           turnsUnavailable={turnsHere ? null : capabilityHelp}
           placement={placement}
           cloudHome={cloudHome}
+          liveProvider={state.config?.live?.provider}
           onClose={closePopovers}
           onChoose={(next) => {
             setCallMode(next);
@@ -340,7 +341,7 @@ export function CallTargetButton({
                 start("live");
               }}
               className="mt-2.5 mr-2 rounded-lg border border-hairline px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-raised"
-              title={callModeHint("live", { cloudHome })}
+              title={callModeHint("live", { cloudHome, provider: state.config?.live?.provider })}
             >
               {t("call.live.startInstead")}
             </button>
@@ -384,12 +385,13 @@ export function CallTargetButton({
   );
 }
 
-export function CallModeMenu({ id, mode, onChoose, onClose, placement = "header", cloudHome = false, turnsUnavailable = null }: {
+export function CallModeMenu({ id, mode, onChoose, onClose, placement = "header", cloudHome = false, liveProvider, turnsUnavailable = null }: {
   id: string;
   mode: CallMode;
   turnsUnavailable?: CallCapabilityHelp | null;
   placement?: CallButtonPlacement;
   cloudHome?: boolean;
+  liveProvider?: "openai" | "azure";
   onChoose: (mode: CallMode) => void;
   onClose: () => void;
 }) {
@@ -430,7 +432,7 @@ export function CallModeMenu({ id, mode, onChoose, onClose, placement = "header"
             <span className="min-w-0 flex-1">
               <span className={cn("block text-[13px] font-medium", unavailable ? "text-ink-tertiary" : "text-ink")}>{t(entry.label)}</span>
               <span className="mt-0.5 block text-[11.5px] leading-[1.4] text-ink-secondary">
-                {unavailable ? `${unavailable.label}. ${unavailable.reason}` : callModeHint(entry.id, { cloudHome })}
+                {unavailable ? `${unavailable.label}. ${unavailable.reason}` : callModeHint(entry.id, { cloudHome, provider: liveProvider })}
               </span>
             </span>
             {mode === entry.id && <Check size={14} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />}

@@ -322,6 +322,9 @@ import {
 import * as tts from "./tts/index.ts";
 import { createDecider, deciderReady, describeDecider } from "./decider/index.ts";
 import { decideRoomResponder, type RoomRoutingInput } from "./decider/room-routing.ts";
+import { azureSettings } from "../shared/copilotbot.ts";
+import { createAzureLiveSession } from "./copilotbot/azure-live.ts";
+import { azureRoutes } from "./copilotbot/azure-routes.ts";
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
 import { ProPlan } from "./pro-plan.ts";
@@ -13197,6 +13200,7 @@ function configStatus() {
     decider: describeDecider(cfg),
     imageGen: avatarImageStatus(cfg),
     live: liveSettingsFor(cfg),
+    azure: azureSettings(cfg.azure),
     profile: { name: cfg.profile?.name ?? "", email: cfg.profile?.email ?? "", aboutMe: cfg.profile?.aboutMe ?? "" },
     managedPolicy: managedPolicy.summary(),
     ...(CLOUD_HOME ? { cloudHome: true } : {}),
@@ -13940,7 +13944,9 @@ const liveCalls = new LiveCallController({
   broadcast: (frame) => broadcast(frame, { adminOnly: true }),
   pro: () => proPlan.liveCallsAllowed(),
   settings: () => ({ key: cfg.live?.key ?? "", ...liveSettingsFor(cfg) }),
-  createSession: ({ key, sdp, botId, threadId, voice }) => createLiveSession({ key, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId), cloudHome: Boolean(CLOUD_HOME) }),
+  createSession: ({ key, sdp, botId, threadId, voice }) => cfg.live?.provider === "azure"
+    ? createAzureLiveSession({ config: { ...cfg.azure }, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId) })
+    : createLiveSession({ key, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId), cloudHome: Boolean(CLOUD_HOME) }),
   // Node's WebSocket (undici) accepts headers in its second argument.
   openSocket: (url, key) => new WebSocket(url, { headers: { authorization: `Bearer ${key}` } } as unknown as string[]) as unknown as LiveSocket,
   attachUrl: (sessionId) => liveAttachUrl(sessionId),
@@ -13971,6 +13977,7 @@ ROUTES.push(createDataRoutes({
   compileChart, validateVegaLite, renderer: chartRenderer,
   exportRoots: dataExportRoots,
 }));
+ROUTES.push(azureRoutes(() => cfg.azure ?? {}));
 ROUTES.push(createLiveRoutes({
   calls: liveCalls,
   resolveTarget: (botId, threadId) => {

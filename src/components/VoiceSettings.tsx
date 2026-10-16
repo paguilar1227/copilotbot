@@ -144,7 +144,7 @@ export function VoiceSettings({
     onPatch({ voice: voiceId });
   };
 
-  const setProvider = (next: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai") => {
+  const setProvider = (next: "elevenlabs" | "fish" | "system" | "chatterbox" | "xai" | "azure") => {
     if (next === provider || switching || (next === "system" && !systemVoicesAvailable)) return;
     setSwitching(true);
     setKeyDraft({ provider: null, value: "" });
@@ -260,6 +260,7 @@ export function VoiceSettings({
             {([
               { value: "elevenlabs", label: "ElevenLabs", available: true },
               { value: "fish", label: "Fish Audio", available: true },
+              { value: "azure", label: "Azure Foundry", available: true },
               { value: "system", label: "Built-in Mac voices", available: systemVoicesAvailable },
               { value: "chatterbox", label: "Chatterbox (local)", available: true },
               { value: "xai", label: t("voice.grok.label"), available: true },

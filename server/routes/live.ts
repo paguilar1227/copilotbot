@@ -11,7 +11,7 @@ export interface LiveRouteDeps {
   calls: Pick<LiveCallController, "start" | "end" | "current" | "deviceRevoked">;
   resolveTarget(botId: string, threadId: string | undefined): { botId: string; botName: string; threadId: string } | null;
   settings(): LiveSettings;
-  saveSettings(patch: { voice?: string; readTypedReplies?: boolean; idleMinutes?: number }): Promise<LiveSettings>;
+  saveSettings(patch: { provider?: "openai" | "azure"; voice?: string; readTypedReplies?: boolean; idleMinutes?: number }): Promise<LiveSettings>;
 }
 
 const id = z.string().regex(/^[\w-]{1,120}$/);
@@ -25,6 +25,7 @@ const sessionBody = z.object({
 const endBody = z.object({ callId: z.string().min(1).max(120) }).strict();
 // Strict, so `key` is refused rather than ignored: the key is saved only through the credential store or PUT /api/config.
 const settingsBody = z.object({
+  provider: z.enum(["openai", "azure"]).optional(),
   voice: z.string().trim().max(40).regex(/^[a-z]*$/).optional(),
   readTypedReplies: z.boolean().optional(),
   idleMinutes: z.number().int().min(1).max(60).optional(),
@@ -59,7 +60,7 @@ export function createLiveRoutes(deps: LiveRouteDeps): RouteHandler {
       try {
         const device = companionDevice(req);
         const { call, sdp } = await deps.calls.start({ auth, ...(device ? { device } : {}), ...target, client: parsed.data.client, sdp: parsed.data.sdp });
-        return json(res, 201, { call, transport: { type: "webrtc", sdp } });
+        return json(res, 201, { call, transport: { type: "webrtc", sdp, ...(deps.settings().provider === "azure" ? { provider: "azure" } : {}) } });
       } catch (error) {
         if (error instanceof LiveCallBusyError) return json(res, 409, { error: error.message, activeCall: error.call });
         if (error instanceof LiveCallNeedsProError) return json(res, 402, { error: error.message, needsPro: true });

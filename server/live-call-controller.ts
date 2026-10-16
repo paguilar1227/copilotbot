@@ -24,6 +24,7 @@ const MAX_REVOKED_DEVICES = 200;
 const DECISION_ECHO_MS = 3_000;
 
 export interface LiveSocket {
+  readonly requiresCloseConfirmation?: boolean;
   readonly readyState: number;
   onopen: ((event: unknown) => void) | null;
   onmessage: ((event: { data: unknown }) => void) | null;
@@ -47,8 +48,8 @@ export interface LiveCallDeps {
   activity(botId: string, threadId: string): LiveActivity;
   broadcast(frame: { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }): void;
   pro(): boolean;
-  settings(): { key: string; voice: string; readTypedReplies: boolean; idleMinutes: number };
-  createSession(input: { key: string; sdp: string; botId: string; threadId: string; voice: string }): Promise<{ sessionId: string; sdp: string }>;
+  settings(): { configured?: boolean; key: string; voice: string; readTypedReplies: boolean; idleMinutes: number };
+  createSession(input: { key: string; sdp: string; botId: string; threadId: string; voice: string }): Promise<{ sessionId: string; sdp: string; openSocket?: () => LiveSocket }>;
   openSocket(url: string, key: string): LiveSocket;
   attachUrl(sessionId: string): string;
   speakable(text: string): string[];
@@ -101,6 +102,7 @@ interface Call {
   key: string;
   sessionId: string;
   socket: LiveSocket | null;
+  openSocket?: () => LiveSocket;
   attached: boolean;
   transcript: LiveTranscript;
   heardThroughMs: number;
@@ -161,12 +163,12 @@ export class LiveCallController {
     if (liveCallFromPhone(input) && !this.deps.pro()) throw new LiveCallNeedsProError();
     const settings = this.deps.settings();
     const key = settings.key.trim();
-    if (!key) throw new LiveSessionError("Add an OpenAI API key to use Live calls.", 409);
+    if (!key && !settings.configured) throw new LiveSessionError("Add an OpenAI API key to use Live calls.", 409);
     const voice = liveVoice(settings.voice);
     const call = this.newCall(input, key, voice);
     // Taken before the first await: a second start in the same tick is refused.
     this.call = call;
-    let session: { sessionId: string; sdp: string };
+    let session: { sessionId: string; sdp: string; openSocket?: () => LiveSocket };
     try {
       session = await this.deps.createSession({ key, sdp: input.sdp, botId: input.botId, threadId: input.threadId, voice });
     } catch (error) {
@@ -175,11 +177,12 @@ export class LiveCallController {
       throw error;
     }
     if (this.call !== call) {
-      this.closeOrphan(session.sessionId, key);
+      this.closeOrphan(session.sessionId, key, session.openSocket);
       throw new LiveSessionError("The call was cancelled.", 503);
     }
     try {
       call.sessionId = session.sessionId;
+      call.openSocket = session.openSocket;
       call.state.startedAt = this.now();
       call.lastActivityAt = this.now();
       call.lastActivity = this.deps.activity(input.botId, input.threadId);
@@ -194,7 +197,7 @@ export class LiveCallController {
     } catch (error) {
       const sidebandOpened = call.socket !== null;
       this.finish(call, "error", "The call could not start.");
-      if (!sidebandOpened) this.closeOrphan(session.sessionId, key);
+      if (!sidebandOpened) this.closeOrphan(session.sessionId, key, session.openSocket);
       throw error;
     }
     return { call: { ...call.state }, sdp: session.sdp };
@@ -277,7 +280,7 @@ export class LiveCallController {
   private attach(call: Call): void {
     let socket: LiveSocket;
     try {
-      socket = this.deps.openSocket(this.deps.attachUrl(call.sessionId), call.key);
+      socket = call.openSocket?.() ?? this.deps.openSocket(this.deps.attachUrl(call.sessionId), call.key);
     } catch {
       this.finish(call, "sideband-lost", "The call could not connect to OpenAI.");
       return;
@@ -301,15 +304,15 @@ export class LiveCallController {
     };
     socket.onclose = () => {
       if (call.state.status === "ended") return;
-      if (call.pendingEnd) this.finish(call, call.pendingEnd);
+      if (call.pendingEnd) this.finish(call, call.pendingEnd, call.socket?.requiresCloseConfirmation ? "Audio stopped on this device, but Azure did not confirm hangup." : undefined);
       else this.finish(call, "sideband-lost", "The call connection to OpenAI dropped.");
     };
   }
 
-  private closeOrphan(sessionId: string, key: string): void {
+  private closeOrphan(sessionId: string, key: string, openSocket?: () => LiveSocket): void {
     let socket: LiveSocket;
     try {
-      socket = this.deps.openSocket(this.deps.attachUrl(sessionId), key);
+      socket = openSocket?.() ?? this.deps.openSocket(this.deps.attachUrl(sessionId), key);
     } catch {
       return;
     }
@@ -336,7 +339,7 @@ export class LiveCallController {
     call.state.status = "ending";
     this.emit(call);
     if (!this.command(call, { type: "session.close" })) this.finish(call, call.pendingEnd);
-    else this.later(call, () => this.finish(call, call.pendingEnd ?? reason), CLOSE_TIMEOUT_MS);
+    else this.later(call, () => this.finish(call, call.pendingEnd ?? reason, call.socket?.requiresCloseConfirmation ? "Audio stopped on this device, but Azure did not confirm hangup." : undefined), CLOSE_TIMEOUT_MS);
     return done;
   }
 
@@ -462,6 +465,9 @@ export class LiveCallController {
         return;
       }
       case "error": {
+        if ((event.error as { code?: unknown } | undefined)?.code === 'azure-hangup-failed') {
+          call.state.error = 'Audio stopped on this device, but Azure did not confirm hangup. Check the Azure connection.';
+        }
         this.recordError(call, String((event.error as { code?: unknown } | undefined)?.code ?? "error"));
         return;
       }

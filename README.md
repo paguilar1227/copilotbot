@@ -1,3 +1,5 @@
+> **CopilotBot private downstream:** setup, build, and upstream-update instructions are in [copilotbot/README.md](copilotbot/README.md).
+
 <div align="center">
 
 # OpenMausBot

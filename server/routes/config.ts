@@ -110,7 +110,7 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
     }
     if ((method === "PUT" || method === "PATCH") && path === "/api/config") {
       const body = await readBody(req);
-      if (hostedModels && ["instances", "anthropic", "openai", "openrouter", "openaiCompat", "xai", "mistral", "cerebras", "groq", "meta", "opencodeGo"].some(key => Object.hasOwn(body, key))) return json(res, 403, { error: HOSTED_PROVIDER_SETTINGS_ERROR });
+      if (hostedModels && ["instances", "azure", "anthropic", "openai", "openrouter", "openaiCompat", "xai", "mistral", "cerebras", "groq", "meta", "opencodeGo"].some(key => Object.hasOwn(body, key))) return json(res, 403, { error: HOSTED_PROVIDER_SETTINGS_ERROR });
       const patch = parseConfigPatch(body);
       if (CLOUD_HOME && (patch.signIn?.admins?.length || patch.signIn?.members?.length)) {
         return json(res, 403, { error: CLOUD_PERSONAL_REFUSAL, code: "cloud_personal" });
@@ -510,6 +510,7 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
           if (persisted.decider?.openrouterKey !== undefined) persisted.decider.openrouterKey = "";
           if (persisted.imageGen?.key !== undefined) persisted.imageGen.key = "";
           if (persisted.imageGen?.customApiKey !== undefined) persisted.imageGen.customApiKey = "";
+          if (persisted.azure?.key !== undefined) persisted.azure.key = "";
           if (persisted.live?.key !== undefined) persisted.live.key = "";
           saveConfig(persisted);
           configWriteCommitted = true;

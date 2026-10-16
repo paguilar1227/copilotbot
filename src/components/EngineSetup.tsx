@@ -1,3 +1,4 @@
+import { AzureSettings } from "../copilotbot/AzureSettings";
 import { useEffect, useState } from "react";
 import { AlertTriangle, Check, Copy, Download, ExternalLink, KeyRound, Loader2, LogIn, TerminalSquare, X } from "lucide-react";
 import { api, type EngineInstall, type InstanceInfo, useStore } from "@/state/store";
@@ -391,7 +392,7 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
 }
 
 export function isApiKeyEngine(instance: InstanceInfo | undefined): boolean {
-  if (!instance || instance.access !== "api" || instance.managed) return false;
+  if (!instance || instance.driverKind === "azureFoundry" || instance.access !== "api" || instance.managed) return false;
   return instance.driverKind !== "claudeAgent" || Boolean(instance.snapshot.version);
 }
 
@@ -514,6 +515,8 @@ export function EngineSetup({
       : signInCommand
         ? t("engineSetup.installDescSignIn")
         : t("engineSetup.installDesc"));
+
+  if (instance.driverKind === "azureFoundry") return <AzureSettings />;
 
   if (apiKeySetup(instance)) {
     return <ApiKeyEngineSetup instance={instance} className={className} unframed={unframed} />;

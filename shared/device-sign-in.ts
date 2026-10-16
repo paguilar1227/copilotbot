@@ -5,11 +5,19 @@
 // link. Neither ever turns arbitrary output into a link, or lets a token ride
 // along in one.
 
-export type DeviceSignInProvider = "codex" | "grok";
+export type DeviceSignInProvider = "codex" | "grok" | "copilot" | "azure";
 
 const CODEX_PAGE = "https://auth.openai.com/codex/device";
 
 const RULES: Record<DeviceSignInProvider, { page(value: string): string | null; code: RegExp }> = {
+  copilot: {
+    page: value => /^https:\/\/github\.com\/login\/device\/?$/.test(value) ? 'https://github.com/login/device' : null,
+    code: /^[A-Z0-9]{4}-[A-Z0-9]{4}$/,
+  },
+  azure: {
+    page: value => /^https:\/\/(?:microsoft\.com\/devicelogin|login\.microsoftonline\.com\/common\/oauth2\/deviceauth)\/?$/.test(value) ? value : null,
+    code: /^[A-Z0-9]{8,12}$/,
+  },
   codex: {
     page: (value) => (/^https:\/\/auth\.openai\.com\/codex\/device\/?$/.test(value) ? CODEX_PAGE : null),
     code: /^[A-Z0-9]{4,8}-[A-Z0-9]{4,8}$/,
@@ -47,6 +55,12 @@ export function isDeviceSignInCode(provider: DeviceSignInProvider, value: string
  * terminal styling. */
 export function deviceSignInPrompt(provider: DeviceSignInProvider, text: string): { authorizationUrl: string; userCode: string } | null {
   const lines = text.split(/\r?\n/).slice(0, -1).map((line) => line.trim());
+  if (provider === 'copilot' || provider === 'azure') {
+    const urls = lines.flatMap(line => line.match(/https:\/\/[^\s<>"']+/g) ?? []);
+    const authorizationUrl = urls.map(url => RULES[provider].page(url)).find(Boolean);
+    const userCode = lines.flatMap(line => line.split(/[^A-Z0-9-]+/)).find(word => isDeviceSignInCode(provider, word));
+    return authorizationUrl && userCode ? { authorizationUrl, userCode } : null;
+  }
   const at = lines.findIndex((line) => RULES[provider].page(line) !== null);
   if (at < 0) return null;
   const userCode = lines.slice(at + 1).map((line) => line.replace(/^code:\s*/i, "")).find((line) => isDeviceSignInCode(provider, line));

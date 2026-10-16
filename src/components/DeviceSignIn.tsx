@@ -19,10 +19,22 @@ export interface DeviceSignInStatus {
 }
 
 export function deviceSignInProvider(driverKind: string): DeviceSignInProvider {
+  if (driverKind === 'copilotAgent') return 'copilot';
+  if (driverKind === 'azureFoundry') return 'azure';
   return driverKind === "grokAgent" ? "grok" : "codex";
 }
 
 export const DEVICE_SIGN_IN_COPY: Record<DeviceSignInProvider, Record<"description" | "start" | "enterCode" | "open" | "security" | "connected" | "connectedAccount" | "failed" | "invalidChallenge", LocaleKey>> = {
+  copilot: {
+    description: 'copilot.setup.description', start: 'copilot.setup.start', enterCode: 'copilot.setup.enterCode',
+    open: 'copilot.setup.open', security: 'copilot.setup.security', connected: 'copilot.setup.connected',
+    connectedAccount: 'copilot.setup.connected', failed: 'copilot.setup.failed', invalidChallenge: 'copilot.setup.invalidChallenge',
+  },
+  azure: {
+    description: 'azure.setup.description', start: 'azure.setup.start', enterCode: 'azure.setup.enterCode',
+    open: 'azure.setup.open', security: 'azure.setup.security', connected: 'azure.setup.connected',
+    connectedAccount: 'azure.setup.connected', failed: 'azure.setup.failed', invalidChallenge: 'azure.setup.invalidChallenge',
+  },
   codex: {
     description: "engineSetup.device.description",
     start: "engineSetup.device.start",
@@ -186,8 +198,8 @@ export function DeviceSignIn({ instanceId, browserPkce = false, provider = "code
       const { auth: next }: { auth: DeviceSignInStatus } = await api(`${base}/start`, { method: "POST" });
       setAuth(next);
       if (next.phase === "succeeded") await refresh();
-      else if (browserPkce && next.phase === "waiting") {
-        const link = chatgptPlanLink(next.authorizationUrl);
+      else if ((browserPkce || provider === "copilot" || provider === "azure") && next.phase === "waiting") {
+        const link = browserPkce ? chatgptPlanLink(next.authorizationUrl) : deviceSignInLink(provider, next.authorizationUrl, next.userCode);
         if (link) await openExternalLink(link);
       }
     } catch (cause) {

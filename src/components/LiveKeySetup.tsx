@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { AzureSettings } from "../copilotbot/AzureSettings";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { liveDisclosure } from "@/lib/call-mode";
 import { cn } from "@/lib/cn";
@@ -7,6 +8,7 @@ import { t } from "@/lib/i18n";
 
 export function LiveKeySetup({ onSaved, compact = false }: { onSaved: () => void; compact?: boolean }) {
   const { state, dispatch } = useStore();
+  const [provider, setProvider] = useState(state.config?.live?.provider ?? "openai");
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,10 +23,11 @@ export function LiveKeySetup({ onSaved, compact = false }: { onSaved: () => void
     setSaving(true);
     setError(null);
     try {
-      const status: ConfigStatus = window.ogb?.setCredential
+      await ( window.ogb?.setCredential
         ? await window.ogb.setCredential("openaiLiveKey", value)
-        : await api("/api/config", { method: "PUT", body: JSON.stringify({ live: { key: value } }) });
-      dispatch({ type: "configStatus", config: status });
+        : await api("/api/config", { method: "PUT", body: JSON.stringify({ live: { key: value } }) }));
+      const selected = await api<ConfigStatus>("/api/config", { method: "PUT", body: JSON.stringify({ live: { provider: "openai" } }) });
+      dispatch({ type: "configStatus", config: selected });
       // The save may finish after the prompt was dismissed; never turn it into a call the user already cancelled.
       if (!mounted.current) return;
       setKey("");
@@ -35,6 +38,9 @@ export function LiveKeySetup({ onSaved, compact = false }: { onSaved: () => void
       if (mounted.current) setSaving(false);
     }
   };
+  if (provider === 'azure') return <div className="w-[420px] max-w-[90vw] rounded-xl bg-panel p-3"><button className="mb-3 text-[12px] text-accent" onClick={() => setProvider('openai')}>Use OpenAI instead</button><AzureSettings onSaved={() => {
+    void api<ConfigStatus>('/api/config', { method: 'PUT', body: JSON.stringify({ live: { provider: 'azure', voice: 'marin' } }) }).then(status => { dispatch({ type: 'configStatus', config: status }); if (status.live?.configured) onSaved(); });
+  }} /></div>;
   return (
     <form
       className={cn(
@@ -46,6 +52,7 @@ export function LiveKeySetup({ onSaved, compact = false }: { onSaved: () => void
         void save();
       }}
     >
+      <button type="button" className="self-start text-[12px] text-accent" onClick={() => setProvider("azure")}>Use Azure Foundry instead</button>
       <div className="text-[13.5px] font-medium text-ink">{t("call.live.keyTitle")}</div>
       <div className="text-[12.5px] leading-[1.45] text-ink-secondary">{t("call.live.keyExplain")}</div>
       <div className="text-[12.5px] leading-[1.45] text-ink-secondary">{liveDisclosure({ cloudHome: state.config?.cloudHome === true })}</div>

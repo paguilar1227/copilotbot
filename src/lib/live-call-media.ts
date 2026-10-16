@@ -58,6 +58,7 @@ export const MEDIA_CONNECT_TIMEOUT_MS = 20_000;
 class LiveUnsupportedError extends Error {}
 
 let audio: HTMLAudioElement | null = null;
+let liveProvider: "openai" | "azure" = "openai";
 const defaults: LiveMediaDeps = {
   getUserMedia: (constraints) => {
     if (!globalThis.navigator?.mediaDevices?.getUserMedia) return Promise.reject(new LiveUnsupportedError(t("call.live.unsupported")));
@@ -137,9 +138,10 @@ export function resetLiveMedia(): void {
   serverAttached = false;
 }
 
-export function applyCaption(current: { caption: string; heard: string }, event: { type?: unknown; delta?: unknown }): { caption: string; heard: string } {
+export function applyCaption(current: { caption: string; heard: string }, event: { type?: unknown; delta?: unknown; transcript?: unknown }): { caption: string; heard: string } {
+  if (event.type === "conversation.item.input_audio_transcription.completed") return { caption: current.caption, heard: String(event.transcript ?? "").slice(-HEARD_CHARS) };
   const delta = typeof event.delta === "string" ? event.delta : "";
-  if (event.type === "session.output_transcript.delta") return { caption: (current.caption + delta).slice(-CAPTION_CHARS), heard: "" };
+  if (["session.output_transcript.delta", "response.output_audio_transcript.delta", "response.audio_transcript.delta"].includes(String(event.type))) return { caption: (current.caption + delta).slice(-CAPTION_CHARS), heard: "" };
   if (event.type === "session.input_transcript.delta") return { caption: current.caption, heard: (current.heard + delta).slice(-HEARD_CHARS) };
   return current;
 }
@@ -217,11 +219,12 @@ export async function startLiveCall(target: { botId: string; threadId: string })
     if (mine !== generation) return;
     const sdp = connection.localDescription?.sdp;
     if (!sdp) throw new Error(t("call.live.noOffer"));
-    const result = await deps.request<{ call: LiveCallState; transport: { sdp: string } }>("/api/live/session", {
+    const result = await deps.request<{ call: LiveCallState; transport: { sdp: string; provider?: "openai" | "azure" } }>("/api/live/session", {
       method: "POST",
       body: JSON.stringify({ botId: target.botId, threadId: target.threadId, sdp, client: liveClient(deps.capabilities()) }),
       timeoutMs: 35_000,
     });
+    liveProvider = result.transport.provider ?? "openai";
     if (mine !== generation) {
       void endOnServer(result.call.callId);
       return;
@@ -402,7 +405,7 @@ async function endOnServer(callId: string): Promise<void> {
 }
 
 function onChannelMessage(raw: unknown) {
-  let event: { type?: unknown; delta?: unknown };
+  let event: { type?: unknown; delta?: unknown; transcript?: unknown };
   try {
     event = JSON.parse(String(raw)) as { type?: unknown; delta?: unknown };
   } catch {
@@ -418,7 +421,7 @@ function onChannelMessage(raw: unknown) {
   const next = applyCaption(state, event);
   if (next.caption === state.caption && next.heard === state.heard) return;
   set(next);
-  if (event.type === "session.input_transcript.delta") {
+  if (event.type === "session.input_transcript.delta" || event.type === "conversation.item.input_audio_transcription.completed") {
     if (heardTimer) clearTimeout(heardTimer);
     heardTimer = setTimeout(() => set({ heard: "" }), HEARD_CLEAR_MS);
   }
@@ -455,7 +458,7 @@ function stopConnectWait() {
 }
 
 function sendClose() {
-  if (channel?.readyState === "open") {
+  if (liveProvider === "openai" && channel?.readyState === "open") {
     try { channel.send(JSON.stringify({ type: "session.close" })); } catch {}
   }
 }

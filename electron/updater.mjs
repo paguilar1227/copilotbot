@@ -80,7 +80,7 @@ export function attachUpdaterWindow(mainWindow) {
 }
 
 export function startUpdater() {
-  if (!app.isPackaged) {
+  if (!app.isPackaged || app.getName?.().toLowerCase() === "copilotbot") {
     updaterCoordinator = null;
     setState({ status: "idle" });
     return;

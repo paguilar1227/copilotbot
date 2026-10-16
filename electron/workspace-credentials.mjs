@@ -1,4 +1,5 @@
 export const WORKSPACE_CREDENTIALS = [
+  { section: "azure", field: "key", name: "azureFoundryKey", env: "COPILOTBOT_AZURE_KEY" },
   { section: "xai", field: "key", name: "xaiApiKey", env: "XAI_API_KEY" },
   { section: "box", field: "token", name: "boxToken", env: "BOX_TOKEN" },
   { section: "tts", field: "key", name: "ttsKey", env: "OMB_TTS_KEY" },

@@ -6,6 +6,7 @@ import { localeChoices, type LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
 import { withTourReset } from "@/lib/guided-tour";
 import { completionPatch } from "@/lib/onboarding";
+import { AzureSettings } from "../copilotbot/AzureSettings";
 import { AnthropicEveryClaudeBot, ApiKeyRow, OpenCodeProviderKeys, VpsConnection } from "./ApiKeys";
 import { AnalyticsRow } from "./AnalyticsRow";
 import { OtherOpenAiCompatServers } from "./OpenAiCompatServers";
@@ -851,6 +852,7 @@ export function SettingsModal() {
                   {t("settings.connections.ready")}
                 </div>
               ) : null}
+              <AzureSettings />
               <div className="text-[11.5px] font-medium uppercase tracking-wide text-ink-secondary">{t("keys.providers.title")}</div>
               <p className="-mt-3 text-[12px] leading-relaxed text-ink-secondary">{t("keys.providers.subtitle")}</p>
               <ApiKeyRow section="openai" testProvider="openai" />

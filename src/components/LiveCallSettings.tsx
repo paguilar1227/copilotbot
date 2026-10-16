@@ -1,5 +1,6 @@
 import { useCallback, useId, useState } from "react";
 
+import { AZURE_VOICES } from "../../shared/copilotbot";
 import { LIVE_VOICE_OPTIONS } from "../../shared/live-call";
 import { t } from "@/lib/i18n";
 import { liveDisclosure } from "@/lib/call-mode";
@@ -22,9 +23,10 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
     dialog?.querySelector<HTMLElement>("select, input, button")?.focus();
   }, []);
   const voice = live.voice || "marin";
-  const known = LIVE_VOICE_OPTIONS.some((option) => option.id === voice);
+  const voiceOptions = live.provider === "azure" ? AZURE_VOICES.map(id => ({ id, label: id[0]!.toUpperCase() + id.slice(1) })) : LIVE_VOICE_OPTIONS;
+  const known = voiceOptions.some((option) => option.id === voice);
 
-  const save = async (patch: Partial<Pick<LiveSettings, "voice" | "readTypedReplies" | "idleMinutes">>) => {
+  const save = async (patch: Partial<Pick<LiveSettings, "provider" | "voice" | "readTypedReplies" | "idleMinutes">>) => {
     setSaving(true);
     setError(null);
     try {
@@ -65,6 +67,8 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
         onClose();
       }}
     >
+      <label className="flex items-center justify-between gap-2"><span>Live provider</span><Select value={live.provider ?? 'openai'} disabled={saving} onChange={e => void save({ provider: e.target.value as 'openai' | 'azure', voice: e.target.value === 'azure' ? 'marin' : voice })}><option value="openai">OpenAI</option><option value="azure">Azure Foundry</option></Select></label>
+      {live.provider === 'azure' && <p className="text-[12px] text-ink-secondary">Uses the Azure connection in Settings → API keys. Azure bills this call to your resource.</p>}
       <label className="flex items-center justify-between gap-2">
         <span className="text-ink-secondary">{t("call.live.voice")}</span>
         <Select
@@ -74,7 +78,7 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
           onChange={(event) => void save({ voice: event.target.value })}
         >
           {!known && <option value={voice}>{voice}</option>}
-          {LIVE_VOICE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          {voiceOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
         </Select>
       </label>
       <div className="-mt-2 text-[11.5px] text-ink-tertiary">{t("call.live.voiceNext")}</div>
@@ -102,7 +106,7 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
           ))}
         </Select>
       </label>
-      <div className="flex items-center justify-between gap-2 border-t border-hairline/60 pt-2">
+      {live.provider !== "azure" && <div className="flex items-center justify-between gap-2 border-t border-hairline/60 pt-2">
         <span className="text-ink-secondary">{t("call.live.key")}</span>
         <span className="flex gap-2">
           <button type="button" className="text-accent hover:underline" onClick={() => setChangingKey((open) => !open)}>
@@ -115,8 +119,9 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
           )}
         </span>
       </div>
-      {changingKey && <LiveKeySetup compact onSaved={() => setChangingKey(false)} />}
-      <div className="text-[11.5px] text-ink-tertiary">{liveDisclosure({ cloudHome: state.config?.cloudHome === true })} {t("call.live.cost")}</div>
+      }
+      {changingKey && live.provider !== "azure" && <LiveKeySetup compact onSaved={() => setChangingKey(false)} />}
+      {live.provider !== "azure" && <div className="text-[11.5px] text-ink-tertiary">{liveDisclosure({ cloudHome: state.config?.cloudHome === true })} {t("call.live.cost")}</div>}
       {error && <div className="text-[12px] text-danger">{error}</div>}
     </div>
   );

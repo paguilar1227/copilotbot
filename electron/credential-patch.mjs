@@ -1,5 +1,6 @@
 // What saving a credential from the desktop changes in the server config, by credential name.
 export const CREDENTIAL_PATCH = {
+  azureFoundryKey: value => ({ azure: { key: value } }),
   composioApiKey: (value) => ({ composio: { apiKey: value } }),
   xaiApiKey: (value) => ({ xai: { key: value } }),
   boxToken: (value) => ({ box: { token: value } }),
