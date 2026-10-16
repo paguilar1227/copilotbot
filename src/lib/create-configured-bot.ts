@@ -33,7 +33,8 @@ export async function createConfiguredBot(
     method: "POST", body: JSON.stringify({ name: profile.name, title: profile.title,
       description: profile.description, modelSelection: profile.modelSelection, section: profile.section,
       requireAvailableModel: true, useDefaults: false, ...(visibility !== undefined ? { visibility } : {}),
-      ...(Object.hasOwn(template.profile, "toolScope") ? { settings: { toolScope } } : {}),
+      ...(["toolScope", "mcpServers", "skillAccess"].some(key => Object.hasOwn(template.profile, key))
+        ? { settings: { toolScope, mcpServers: profile.mcpServers, skillAccess: profile.skillAccess } } : {}),
       ...(preset ? { preset: preset.id } : {}) }),
   });
   let bot = response.bot;
@@ -65,6 +66,19 @@ export async function createConfiguredBot(
     for (const skill of template.skills) {
       if (preset?.skills.includes(skill.name)) continue;
       await request(`/api/bots/${bot.id}/skill-template`, { method: "POST", body: JSON.stringify(skill) });
+    }
+    if (template.librarySkills?.length) {
+      const resources = await request<import("../../shared/bot-resources").ResourceState>(`/api/copilotbot/bots/${bot.id}/resources`);
+      const library = { skills: resources.catalog.skills.filter(skill => skill.origin === "library") };
+      const available = new Set(library.skills.map(skill => skill.name));
+      const known = template.librarySkills.filter(name => available.has(name));
+      if (known.length) await request(`/api/bots/${bot.id}/skills-library`, { method: "PUT", body: JSON.stringify({ skills: known }) });
+      const assigned = new Set(known);
+      const missing = template.librarySkills.filter(name => !assigned.has(name));
+      if (missing.length) warnings.push(`Skills not installed: ${missing.join(", ")}. Add them from Skills & MCPs.`);
+    }
+    if (profile.skillAccess !== undefined || profile.mcpServers !== undefined) {
+      await request(`/api/copilotbot/bots/${bot.id}/resources`, { method: "PUT", body: JSON.stringify({ skills: profile.skillAccess ?? null, mcpServers: profile.mcpServers ?? null }) });
     }
     for (const routine of template.routines) {
       const result = await request<{ routine: Routine }>("/api/routines", {

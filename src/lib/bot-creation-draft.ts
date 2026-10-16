@@ -1,3 +1,4 @@
+import type { ResourceState } from "../../shared/bot-resources";
 import type { NewBotDefaults, BotDefaultsProfile, BotRoutineTemplate } from "../../shared/new-bot-defaults";
 import { api, type Bot, type ModelSelection } from "@/state/store";
 import type { BotUpdatePatch } from "@/state/bot-patch-queue";
@@ -29,13 +30,13 @@ export class BotCreationDraft {
   }
 
   get bot(): Bot {
-    const { computer, cwd, peers, toolScope, ...profile } = this.template.profile;
+    const { computer, cwd, peers, toolScope, skillAccess, mcpServers, ...profile } = this.template.profile;
     return {
       id: this.id, threadId: this.id, name: "", title: "", description: "", soul: "",
       color: "green", notifications: true, unread: false, messages: [],
       modelSelection: { instanceId: "", model: "" }, ...profile,
       computer: computer ?? undefined, cwd: cwd ?? undefined, peers: peers ?? undefined,
-      toolScope: toolScope ?? undefined,
+      toolScope: toolScope ?? undefined, skillAccess: skillAccess ?? undefined, mcpServers: mcpServers ?? undefined,
     };
   }
 
@@ -106,12 +107,27 @@ export class BotCreationDraft {
     };
   }
 
+  private async resources(): Promise<ResourceState> {
+    const available = await this.network<ResourceState>(`/api/copilotbot/resources?section=${encodeURIComponent(this.bot.section ?? "")}&draft=1`);
+    const skills = available.catalog.skills.filter(skill => skill.origin === "library");
+    for (const skill of this.template.skills) {
+      const index = skills.findIndex(item => item.name === skill.name);
+      if (index >= 0) skills.splice(index, 1);
+      skills.push(skill);
+    }
+    const policy = { skills: this.template.profile.skillAccess ?? null, mcpServers: this.template.profile.mcpServers ?? null };
+    return { ...available, policy, inherited: available.policy, catalog: { ...available.catalog, skills }, busy: false };
+  }
+
   request: typeof api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
     const base = `/api/bots/${this.id}`;
     let result: unknown;
-    if (path === base && method === "PATCH") {
+    if (path === `/api/copilotbot/bots/${this.id}/resources`) {
+      if (method === "PUT") this.patch({ skillAccess: body.skills, mcpServers: body.mcpServers });
+      result = await this.resources();
+    } else if (path === base && method === "PATCH") {
       this.patch(body); result = { bot: this.bot };
     } else if (path === `${base}/soul` && method === "GET") {
       result = { soul: this.bot.soul, revision: "draft", bytes: new TextEncoder().encode(this.bot.soul).length, limit: 24000, file: "", drift: false };

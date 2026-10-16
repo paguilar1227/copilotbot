@@ -468,6 +468,16 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(JSON.parse(readFileSync(dump, "utf8")).argv).toContain("--add-dir");
   });
 
+  it("refuses inherited configuration for resource limits even without a tool selection", async () => {
+    const dump = join(scratch, "resource-inherited.json"); process.env.FAKE_CLAUDE_DUMP = dump;
+    process.env.OMB_CLAUDE_INHERIT_USER_CONFIG = "1";
+    try {
+      await create();
+      await expect(instance.adapter.sendTurn({ threadId: "resource-inherited", text: "Must not run", restrictResources: true })).rejects.toThrow(/resource limits/);
+      expect(existsSync(dump)).toBe(false);
+    } finally { delete process.env.OMB_CLAUDE_INHERIT_USER_CONFIG; }
+  });
+
   it("refuses native MCP inheritance when a bot has an explicit selection", async () => {
     const dump = join(scratch, "scope-inherited-mcp.json"); process.env.FAKE_CLAUDE_DUMP = dump;
     await create();

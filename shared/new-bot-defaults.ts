@@ -1,13 +1,15 @@
-import type { WireBot } from "./wire";
-import type { RoutineInput } from "./routines";
-import type { ToolScope } from "./tool-scope";
+import type { WireBot } from "./wire.ts";
+import type { RoutineInput } from "./routines.ts";
+import type { ToolScope } from "./tool-scope.ts";
 
 /** Data shared by the default template and an individual creation draft. */
 export type BotDefaultsProfile = Partial<Pick<WireBot,
   "name" | "title" | "description" | "soul" | "notifications" | "avatarUrl" | "avatarCrop" |
   "mascotBody" | "color" | "voice" | "speakReplies" | "section" | "modelSelection" |
   "cloudBackend" | "autoStartVps" | "approvalMode" | "alwaysAllow" | "chiefOfStaff" |
-  "managedSections" | "approvePeerComms" | "composio" | "browser"
+  "managedSections" | "approvePeerComms" | "composio" | "browser" | "replyStyle" |
+  "voiceNotes" | "memoryEnabled" | "memoryUpkeep" | "recordBrowserSteps" |
+  "avatarZoom" | "avatarFocusX" | "avatarFocusY"
 >> & {
   mascotExpression?: string | null;
   computer?: WireBot["computer"] | null;
@@ -15,9 +17,11 @@ export type BotDefaultsProfile = Partial<Pick<WireBot,
   peers?: string[] | null;
   browserProfile?: string | null;
   mcpServers?: string[] | null;
+  skillAccess?: string[] | null;
   toolScope?: ToolScope | null;
   parkDirectMessages?: boolean;
   helperModel?: boolean;
+  cacheKeepWarm?: boolean | null;
 };
 
 export type BotRoutineTemplate = Omit<RoutineInput, "botId" | "target" | "groupId" | "resultsThreadId">;
@@ -34,4 +38,5 @@ export interface NewBotDefaults {
   memory: Record<string, string>;
   skills: BotSkillTemplate[];
   routines: BotRoutineTemplate[];
+  librarySkills?: string[];
 }

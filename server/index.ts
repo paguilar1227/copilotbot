@@ -326,6 +326,9 @@ import { azureSettings } from "../shared/copilotbot.ts";
 import { createAzureLiveSession } from "./copilotbot/azure-live.ts";
 import { createAzureGptLiveSession } from "./copilotbot/azure-gpt-live.ts";
 import { azureRoutes } from "./copilotbot/azure-routes.ts";
+import { sectionMemoryKey } from "./section-context.ts";
+import { ResourcePolicies, configureResourceAccess } from "./copilotbot/resource-access.ts";
+import { resourceRoutes } from "./copilotbot/resource-routes.ts";
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
 import { ProPlan } from "./pro-plan.ts";
@@ -3171,6 +3174,8 @@ const store = new Store(
   (selection) => withNewBotEffort(selection, cfg.newBots?.effort, registry.get(selection.instanceId)?.adapter.capabilities.effortLevels),
   (instanceId) => registry.cliTarget(instanceId)?.driverKind,
 );
+const resourcePolicies = new ResourcePolicies(join(DATA_DIR, "resource-policies.json"), sectionMemoryKey);
+configureResourceAccess(id => { const bot = store.bot(id); return bot ? resourcePolicies.effective(bot) : { skills: [], mcpServers: [] }; });
 const skillsHost = createSkillsLibraryHost({ store, cfg, appendSkillRequestCard });
 const { listBotSkills, readBotSkillFile } = skillsHost;
 const highlevelHost = createHighLevelHost({ service: highlevel, dataDir: DATA_DIR, bot: (id) => store.bot(id),
@@ -6296,6 +6301,13 @@ function claimTeamComputerLifecycle(computer: TeamComputerRecord): () => void {
 }
 
 function assertTeamComputerChangeIdle(before: BotRecord, after: BotRecord): void {
+  const resources = (bot: BotRecord) => {
+    const policy = resourcePolicies.effective(bot);
+    return JSON.stringify({ skills: policy.skills?.toSorted() ?? null, mcpServers: policy.mcpServers?.toSorted() ?? null });
+  };
+  if (resources(before) !== resources(after) && (before.busy || botHasActiveTurn(before.id))) {
+    throw Object.assign(new Error("Stop this bot's work before moving it between teams with different resource access."), { status: 409 });
+  }
   const previous = inheritedTeamComputer(before);
   const next = inheritedTeamComputer(after);
   if (previous?.id === next?.id) return;
@@ -9174,7 +9186,7 @@ async function startTurn(
         mentionTurn: tagged.length > 0,
         integrations,
         ...(integrations.browser && browserIsThePlace(plan) ? { preloadBrowserTools: true } : {}),
-        ...settingsTurnFields(cfg, DATA_DIR, managedPolicy.restrictsMcp()),
+        ...resourceTurnFields(bot),
         cwd,
       })), () => !directTurnClaimExists(bot.id, dispatchClaimId, threadId), async () => {
         await instance.adapter.interruptTurn(threadId).catch(() => {});
@@ -11274,7 +11286,7 @@ async function runClaimedGroupMemberTurn(
     if (roomReset || displaced) broadcast({ kind: "group", group: publicGroupState(store.group(groupId) ?? group) });
     const roomShareNote = skillsHost.shareNote(bot, threadId, Boolean(workspace));
     const clock = turnClockLine(Date.now(), hostTimeZone());
-    const roomToolScope = toolScopeForTurn(readyBot.id), roomUserMcp = claudeUserMcpEnabled(cfg) && !managedPolicy.restrictsMcp();
+    const roomToolScope = toolScopeForTurn(readyBot.id), roomUserMcp = claudeUserMcpEnabled(cfg) && !managedPolicy.restrictsMcp() && resourcePolicies.effective(readyBot).mcpServers === null;
     const roomSession = roomSessions.dispatch({
       threadId, botId: readyBot.id, claimId: internalGeneration, instance, guestConfined: roomGuestConfined, reset: Boolean(roomReset), hooks: Boolean(integrations.hooks),
       context: () => ({ ...roomMemberContexts.forThread(threadId)?.[readyBot.id], compactAt: nativeCompactTokens(instance) }),
@@ -11297,7 +11309,7 @@ async function runClaimedGroupMemberTurn(
         cwd,
         integrations,
         ...(integrations.browser && browserIsThePlace(roomPlan) ? { preloadBrowserTools: true } : {}),
-        ...settingsTurnFields(cfg, DATA_DIR, managedPolicy.restrictsMcp()),
+        ...resourceTurnFields(readyBot),
         ...(instance.instanceId === readyBot.modelSelection.instanceId
           ? memberTurnSelection(readyBot.modelSelection)
           : { model: instance.models.default }),
@@ -13292,8 +13304,16 @@ function mcpServerBody(body: unknown): Record<string, unknown> {
   return out;
 }
 
+function resourceTurnFields(bot: BotRecord) {
+  const policy = resourcePolicies.effective(bot);
+  const restrictResources = policy.skills !== null || policy.mcpServers !== null;
+  const fields = settingsTurnFields(cfg, DATA_DIR, managedPolicy.restrictsMcp() || restrictResources);
+  if (policy.skills !== null) delete fields.userSkillsDir;
+  return { ...fields, restrictResources };
+}
+
 function engineMcpServers(bot: BotRecord) {
-  return withoutPendingSignIn(managedPolicy.filterMcp(customMcpServers(cfg, bot.mcpServers)), mcpOAuth);
+  return withoutPendingSignIn(managedPolicy.filterMcp(customMcpServers(cfg, resourcePolicies.effective(bot).mcpServers ?? undefined)), mcpOAuth);
 }
 
 function persistMcpServers(next: Record<string, unknown>): void {
@@ -13979,6 +13999,10 @@ ROUTES.push(createDataRoutes({
   exportRoots: dataExportRoots,
 }));
 ROUTES.push(azureRoutes(() => cfg.azure ?? {}));
+ROUTES.push(resourceRoutes({ store, cfg, policies: resourcePolicies, sessionLive: id => sessions.isLive(id),
+  busy: bot => Boolean(bot.busy || activeGroupTurnForBot(bot.id)),
+  routines: botId => routines?.listRoutines().filter(routine => routine.botId === botId) ?? [],
+}));
 ROUTES.push(createLiveRoutes({
   calls: liveCalls,
   resolveTarget: (botId, threadId) => {

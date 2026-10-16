@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resourceNamesSchema } from "../copilotbot/resource-access.ts";
 
 import { approvalModeFor, isApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";
 import { normalizeConnectorScopes } from "../../shared/connector-scopes.ts";
@@ -251,6 +252,12 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       }
       // Omitted keeps the selection; null restores all enabled servers; [] mounts none.
       let requestedMcpServers = existingBot?.mcpServers;
+      if (body.skillAccess !== undefined) {
+        const parsed = resourceNamesSchema.safeParse(body.skillAccess);
+        if (!parsed.success) return json(res, 400, { error: "skillAccess must be skill names or null" });
+        if (existingBot?.busy || (existingBot && activeGroupTurnForBot(existingBot.id))) return json(res, 409, { error: "Stop this bot before changing its skills." });
+        patch.skillAccess = parsed.data ?? undefined;
+      }
       if (Object.hasOwn(body, "toolScope")) {
         const parsed = parseToolScope(body.toolScope === null ? undefined : body.toolScope);
         if (!parsed.ok) return json(res, 400, { error: parsed.error });
@@ -525,6 +532,9 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
         loosened.push("mcpServers");
       }
       if (Object.hasOwn(body, "toolScope") && toolScopeWidens(existingBot?.toolScope, patch.toolScope)) loosened.push("toolScope");
+      const previousSkills = existingBot?.skillAccess ? new Set(existingBot.skillAccess) : null;
+      if (body.skillAccess !== undefined && previousSkills &&
+          (!Array.isArray(patch.skillAccess) || patch.skillAccess.some((name: string) => !previousSkills.has(name)))) loosened.push("skillAccess");
       const browserOrigin = typeof req.headers.origin === "string" && req.headers.origin.trim() !== "";
       if (loosened.length && auth.kind === "loopback" && !DESKTOP_MANAGED && !browserOrigin) {
         if (store.bots.some((candidate) => candidate.busy)) {

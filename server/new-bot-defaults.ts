@@ -1,4 +1,5 @@
 import { z } from "zod";
+const resourceNamesSchema = z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64));
 import { profilePatchSchema, fitsOnOneLine } from "./bot-profile.ts";
 import { EFFORT_LEVELS } from "../shared/wire.ts";
 import { isModelVariant } from "./contracts.ts";
@@ -39,6 +40,12 @@ export const botDefaultsProfileSchema = profilePatchSchema.extend({
   browser: z.boolean().optional(),
   browserProfile: z.string().max(100).nullable().optional(),
   mcpServers: strings(100, 100).nullable().optional(),
+  skillAccess: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64)).nullable().optional(),
+  voiceNotes: z.boolean().optional(),
+  memoryEnabled: z.boolean().optional(),
+  memoryUpkeep: z.boolean().optional(),
+  recordBrowserSteps: z.boolean().optional(),
+  cacheKeepWarm: z.boolean().nullable().optional(),
   toolScope: z.custom<ToolScope>((value) => value !== undefined && parseToolScope(value).ok, "Invalid tool selection")
     .transform((value) => { const parsed = parseToolScope(value); return parsed.ok ? parsed.scope! : value; }).nullable().optional(),
   parkDirectMessages: z.boolean().optional(),
@@ -98,6 +105,7 @@ export const newBotDefaultsSchema = z.object({
     .refine(value => Object.keys(value).length <= 100, "At most 100 memory files").default({}),
   skills: z.array(botSkillTemplateSchema).max(100).default([]),
   routines: z.array(botRoutineTemplateSchema).max(100).default([]),
+  librarySkills: resourceNamesSchema.optional(),
 }).strict().refine(value => Buffer.byteLength(JSON.stringify(value), "utf8") <= 900_000,
   "Bot defaults must fit within 900 KB");
 

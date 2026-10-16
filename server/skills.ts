@@ -1,3 +1,4 @@
+import { skillAllowed } from "./copilotbot/resource-access.ts";
 // Per-bot Agent Skills: imports keep SKILL.md only and land disabled; learned skills may add reviewed references/<topic>.md files.
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -386,7 +387,7 @@ export function syncSkillLinks(
   }
   const manifest = readManifest(botId);
   const enabled = Object.entries(manifest).filter(
-    ([name, entry]) => entry.enabled && skillContentMatches(botId, name, entry),
+    ([name, entry]) => entry.enabled && skillAllowed(botId, name) && skillContentMatches(botId, name, entry),
   );
   const desired = new Map(enabled.map(([name, entry]) => [name, skillTarget(root, name, entry)]));
   const managed = new Set<string>();
@@ -1260,7 +1261,7 @@ export function undoSkillWrite(
 
 export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly string[], startedAt?: number): string {
   syncSkillLinks(botId);
-  const enabled = resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled);
+  const enabled = resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled && skillAllowed(botId, skill.name));
   if (!enabled.length) {
     loggedIndexOmissions.delete(botId);
     return "";
@@ -1299,7 +1300,7 @@ export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly str
 }
 
 export function enabledSkillFile(botId: string, name: string, assignedLibrary?: readonly string[]): string | null {
-  const skill = resolveBotSkills(botId, assignedLibrary).find((entry) => entry.name === name && entry.enabled);
+  const skill = resolveBotSkills(botId, assignedLibrary).find((entry) => entry.name === name && entry.enabled && skillAllowed(botId, entry.name));
   if (!skill) return null;
   const entry = readManifest(botId)[name];
   return entry ? join(skillTarget(workspaceDir(botId), name, entry), "SKILL.md") : librarySkillFilePath(name);
@@ -1307,7 +1308,7 @@ export function enabledSkillFile(botId: string, name: string, assignedLibrary?: 
 
 export function expandSkillCommandTurnText(botId: string, text: string, assignedLibrary?: readonly string[]): string {
   if (!text.trimStart().startsWith("/")) return text;
-  const names = resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled).map((skill) => skill.name);
+  const names = resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled && skillAllowed(botId, skill.name)).map((skill) => skill.name);
   const command = parseSkillCommand(text, names);
   if (!command) return text;
   const file = enabledSkillFile(botId, command.name, assignedLibrary);

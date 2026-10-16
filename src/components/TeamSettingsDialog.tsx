@@ -23,9 +23,10 @@ import { EFFORT_LEVELS, type EffortLevel } from "../../shared/wire";
 import { approvalModeOptions } from "./ApprovalModeSelector";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { effortLabel } from "./ModelPicker";
+import { ResourceSettings } from "@/copilotbot/ResourceSettings";
 import { Select } from "./Select";
 
-type Tab = "approval" | "model";
+type Tab = "approval" | "model" | "resources";
 const KEEP = "";
 const ENGINE_DEFAULT = "default";
 
@@ -63,7 +64,7 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
   const bots = useMemo(() => teamBots(state.bots, team), [state.bots, team]);
   const models = useMemo(() => teamModelChoices(bots, state.instances), [bots, state.instances]);
   const efforts = useMemo(() => teamEffortChoices(bots, state.instances, EFFORT_LEVELS), [bots, state.instances]);
-  const change: TeamChange | null = tab === "approval"
+  const change: TeamChange | null = tab === "resources" ? null : tab === "approval"
     ? mode ? { kind: "approval", mode } : null
     : model === KEEP && effort === KEEP ? null
       : {
@@ -123,12 +124,13 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
           </>
         ) : (
           <>
-            <p className="mb-3 text-[13px] leading-relaxed text-ink-secondary">{t("teamSettings.intro", { count: bots.length })}</p>
+            {tab !== "resources" && <p className="mb-3 text-[13px] leading-relaxed text-ink-secondary">{t("teamSettings.intro", { count: bots.length })}</p>}
             <div className="mb-3 flex gap-1 rounded-lg bg-inset p-0.5" role="tablist">
               <button type="button" role="tab" aria-selected={tab === "approval"} disabled={running} className={tabClass(tab === "approval")} onClick={() => setTab("approval")}>{t("teamSettings.tab.approval")}</button>
               <button type="button" role="tab" aria-selected={tab === "model"} disabled={running} className={tabClass(tab === "model")} onClick={() => setTab("model")}>{t("teamSettings.tab.model")}</button>
+              <button type="button" role="tab" aria-selected={tab === "resources"} disabled={running} className={tabClass(tab === "resources")} onClick={() => setTab("resources")}>Skills &amp; MCPs</button>
             </div>
-            {tab === "approval" ? (
+            {tab === "resources" ? <ResourceSettings team={team} /> : tab === "approval" ? (
               <fieldset disabled={running} className="flex flex-col gap-1">
                 <legend className="sr-only">{t("teamSettings.tab.approval")}</legend>
                 {approvalModeOptions().filter((option) => (TEAM_APPROVAL_MODES as readonly string[]).includes(option.mode)).map((option) => (
@@ -169,11 +171,11 @@ export function TeamSettingsDialog({ team, onClose }: { team: string; onClose: (
             )}
             <div className="mt-4 flex items-center justify-end gap-2">
               {running && <span role="status" className="mr-auto text-[12px] text-ink-secondary">{t("teamSettings.progress", { done: progress, count: plan.length })}</span>}
-              <button type="button" disabled={running} onClick={close} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t("common.cancel")}</button>
-              <button type="button" disabled={running || !applying} onClick={apply}
+              <button type="button" disabled={running} onClick={close} className="rounded-lg px-3 py-2 text-[13px] text-ink-secondary hover:bg-raised">{t(tab === "resources" ? "teamSettings.done" : "common.cancel")}</button>
+              {tab !== "resources" && <button type="button" disabled={running || !applying} onClick={apply}
                 className="rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40">
                 {t(applying === 1 ? "teamSettings.applyOne" : "teamSettings.applyMany", { count: applying })}
-              </button>
+              </button>}
             </div>
           </>
         )}

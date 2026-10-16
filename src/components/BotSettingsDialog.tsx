@@ -13,6 +13,8 @@ import { IdentitySection } from "./bot-settings/IdentitySection";
 import { SlackSection } from "./bot-settings/SlackSection";
 import { useSlackManagementUrl } from "./bot-settings/useSlackManagement";
 import { SoulSection } from "./bot-settings/SoulSection";
+import { ExportBotTemplate } from "@/copilotbot/ExportBotTemplate";
+import { ResourceSettings } from "@/copilotbot/ResourceSettings";
 import { SkillsSection } from "./bot-settings/SkillsSection";
 import { MemorySection } from "./bot-settings/MemorySection";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
@@ -239,19 +241,19 @@ export function BotSettingsDialog({ bot, overlay = false }: {
         );
       case "identity":
         return (
-          <IdentitySection
+          <><ExportBotTemplate botId={bot.id} /><IdentitySection
             bot={bot}
             patch={derived.patch}
             activeState={derived.activeState}
             mascotMotion={derived.mascotMotion}
-          />
+          /></>
         );
       case "soul":
         return <SoulSection bot={bot} patch={derived.patch} />;
       case "slack":
         return slackUrl ? <SlackSection managementUrl={slackUrl} /> : null;
       case "skills":
-        return <SkillsSection bot={bot} />;
+        return <div className="space-y-5"><ResourceSettings bot={bot} /><SkillsSection bot={bot} /></div>;
       case "memory":
         return <MemorySection bot={bot} active={!collapsed && section === "memory"} onToggle={(enabled) => derived.patch({ memoryEnabled: enabled })} />;
       case "routines":

@@ -1,6 +1,6 @@
 # CopilotBot
 
-Private downstream of [OpenMausBot](https://github.com/milind-soni/OpenMausBot), based on upstream commit `113ec83256971c62088a0bbd507c6fa3a2cd4091`.
+Downstream of [OpenMausBot](https://github.com/milind-soni/OpenMausBot), based on upstream commit `113ec83256971c62088a0bbd507c6fa3a2cd4091`.
 
 ## Set up
 
@@ -18,6 +18,14 @@ Open Settings → Engines → GitHub Copilot. If the CLI is missing, the setup c
 
 The model catalog comes from ACP. Models and reasoning effort use separate controls. Unsupported effort is rejected before a prompt is sent. The CLI must support ACP and `login --device-code`.
 
+### Bot templates and resources
+
+New bot → **Import YAML file** loads a reviewable draft. Nothing runs until **Create bot**. Bot settings → **Identity → Export YAML template** saves version 1 of `copilotbot/bot`, including model/effort, persona, permission preferences, voice, routines and resource selections. Credentials, grants, conversation history, learned memory, attached files and avatar images are excluded. Review free-text instructions before sharing them.
+
+**Skills & MCPs** appears in bot settings and team settings. Choose all available resources, selected names, or none. Team choices limit every member, including future members; individual choices can narrow them further. Changes wait until affected bots are idle. A selected skill must also be installed, assigned and enabled. Imported templates report missing or disabled resources; they never install servers or transfer sign-ins. Skill references use the local shared library; private skills must be added to the new bot separately.
+
+These choices control the app's skill index, managed native skill links, skill tools and configured MCP mounts. They are not a filesystem sandbox or a replacement for a CLI's independently configured plugins. Team policies are stored separately from upstream settings, using stable team identifiers that survive renames.
+
 ### Azure Foundry
 
 Open Settings → API keys → Azure Foundry. Choose Microsoft Entra ID or an Azure resource API key. Entra uses the existing Azure CLI login, or **Sign in with Microsoft** starts device-code sign-in. This requires Azure CLI on the server. Tenant and subscription can be selected explicitly. Tokens refresh on demand and stay on the server.
@@ -30,7 +38,7 @@ References: [Azure Realtime WebRTC](https://learn.microsoft.com/en-us/azure/foun
 
 ## Updating from upstream
 
-Keep `upstream` pointing to `milind-soni/OpenMausBot` and `origin` pointing to this private repository. Merge upstream history; do not rebase or squash the imported history.
+Keep `upstream` pointing to `milind-soni/OpenMausBot` and `origin` pointing to this repository. Merge upstream history; do not rebase or squash the imported history.
 
 ```sh
 git fetch upstream

@@ -351,6 +351,7 @@ export interface Bot {
   cacheKeepWarm?: boolean | null;
   helperModel?: boolean;
   mcpServers?: string[] | null;
+  skillAccess?: string[] | null;
   browserProfile?: string | null;
   visibility?: BotVisibility;
   installedPackage?: InstalledPackageMetadata;

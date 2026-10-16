@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Trash2, X, Upload } from "lucide-react";
 import { api, BotEditorStore, useStore, type Bot, type ModelSelection } from "@/state/store";
 import { BotCreationDraft, EMPTY_BOT_DEFAULTS } from "@/lib/bot-creation-draft";
 import { createConfiguredBot, preparedBotTemplate } from "@/lib/create-configured-bot";
@@ -27,8 +27,9 @@ import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import { SharePresetDialog } from "./SharePresetDialog";
 import { SettingRow } from "./SettingsPrimitives";
 import { Select } from "./Select";
+import { ResourceSettings } from "@/copilotbot/ResourceSettings";
 
-const SECTIONS = ["Identity", "Soul", "Skills", "Memory", "Routines", "Access", "Model", "Permissions", "Voice & alerts"] as const;
+const SECTIONS = ["Identity", "Soul", "Skills & MCPs", "Memory", "Routines", "Access", "Model", "Permissions", "Voice & alerts"] as const;
 type Section = typeof SECTIONS[number];
 
 /** Companion pairing permits creation, but not reading host defaults or patching host settings. */
@@ -76,6 +77,21 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
   const [draft, setDraft] = useState(() => new BotCreationDraft(EMPTY_BOT_DEFAULTS, () => render(value => value + 1)));
   const [active, setActive] = useState<Section>("Identity");
   const [ready, setReady] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [imported, setImported] = useState("");
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const importTemplate = async (file: File) => {
+    setSaving(true); setError("");
+    try {
+      if (file.size > 900_000) throw new Error("Bot template must fit within 900 KB");
+      const result = await api<{ defaults: NewBotDefaults; warnings: string[] }>("/api/copilotbot/bot-template", { method: "POST", body: JSON.stringify({ yaml: await file.text() }) });
+      if (!result.defaults.profile.modelSelection) result.defaults.profile.modelSelection = draft.bot.modelSelection;
+      if (section !== undefined) result.defaults.profile.section = section;
+      setDraft(new BotCreationDraft(result.defaults, () => render(value => value + 1)));
+      setImported(file.name); setImportWarnings(result.warnings); setActive("Identity");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setSaving(false); }
+  };
   const [localSaving, setSaving] = useState(false);
   const saving = localSaving || parent.state.botCreationPending;
   const savingRef = useRef(false);
@@ -182,6 +198,16 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
         <button type="button" onClick={() => closeRef.current()} aria-label={t("common.close")}
           className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-40"><X size={18} className="pointer-events-none" /></button>
       </div>
+      {!defaultsMode && <div className="border-b border-hairline/40 px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-medium text-ink">Create a new bot</span>
+          <span className="text-[13px] text-ink-secondary">or</span>
+          <button type="button" disabled={!ready || saving} onClick={() => fileInput.current?.click()} className="flex items-center gap-2 rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-40"><Upload size={14} />Import YAML file</button>
+          <input ref={fileInput} type="file" accept=".yaml,.yml,application/yaml,text/yaml" className="hidden" aria-label="Import bot YAML file" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importTemplate(file); }} />
+        </div>
+        {imported && <p role="status" className="mt-2 text-[12px] text-ink-secondary">Loaded {imported}. Review the settings below, then create the bot.</p>}
+        {importWarnings.map(message => <p key={message} className="mt-1 text-[12px] text-warning">{message}</p>)}
+      </div>}
         {choosesVisibility && (
           <div className="flex flex-wrap items-center gap-2 px-5 pt-3 text-[13px] text-ink-secondary" data-new-bot-visibility>
             <label className="flex items-center gap-2">
@@ -250,7 +276,7 @@ function DraftSection({ active, draft, defaultsMode }: { active: Section; draft:
     </label>
   </div>;
   if (active === "Soul") return <SoulSection bot={bot} patch={derived.patch} />;
-  if (active === "Skills") return <SkillsSection bot={bot} />;
+  if (active === "Skills & MCPs") return <div className="space-y-5"><ResourceSettings bot={bot} /><SkillsSection bot={bot} /></div>;
   if (active === "Memory") return <DraftMemory draft={draft} />;
   if (active === "Routines") return <DraftRoutines draft={draft} />;
   if (active === "Access") return <AccessSection bot={bot} derived={derived} />;

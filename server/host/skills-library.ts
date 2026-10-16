@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { skillAllowed } from "../copilotbot/resource-access.ts";
 
 import type { SkillRequestCardData, SkillShareRecord } from "../../shared/skill-request.ts";
 import { narrowestAudience, intersectAudience } from "../bot-visibility.ts";
@@ -62,8 +63,9 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
   const mode = () => shareLearnedSkillsMode(cfg);
 
   const listBotSkills = (bot: BotRecord) =>
-    skillsLibraryEnabled(cfg) ? resolveBotSkills(bot.id, bot.assignedSkills) : listSkills(bot.id);
+    (skillsLibraryEnabled(cfg) ? resolveBotSkills(bot.id, bot.assignedSkills) : listSkills(bot.id)).filter(skill => skillAllowed(bot.id, skill.name));
   const readBotSkillFile = (bot: BotRecord, name: string): string | null => {
+    if (!skillAllowed(bot.id, name)) return null;
     const own = readSkillFile(bot.id, name);
     if (own !== null || !skillsLibraryEnabled(cfg)) return own;
     // Private wins collisions: a private skill that no longer verifies must not fall through to a same-named library skill.
@@ -93,7 +95,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
   const liveAssigned = (bot: BotRecord) => store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills;
 
   const editable = (botId: string, name: string): boolean =>
-    mode() !== "off" && sharedSkillEditable(botId, store.bot(botId)?.assignedSkills, name);
+    mode() !== "off" && skillAllowed(botId, name) && sharedSkillEditable(botId, store.bot(botId)?.assignedSkills, name);
 
   function summaryLine(share: SkillShareRecord): string {
     const mates = share.assigned.map((bot) => bot.name);
@@ -193,7 +195,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     shareNote(bot: BotRecord, threadId: string, enabled: boolean): TurnShareNote {
       if (!enabled || !skillsLibraryEnabled(cfg)) return NO_TURN_NOTE;
       try {
-        const note = prepareShareNote(bot.id, threadId, liveAssigned(bot), conversationStartedAt(threadId), listSkills(bot.id).map((skill) => skill.name));
+        const note = prepareShareNote(bot.id, threadId, liveAssigned(bot)?.filter(name => skillAllowed(bot.id, name)), conversationStartedAt(threadId), listSkills(bot.id).map((skill) => skill.name));
         if (!note.text) return NO_TURN_NOTE;
         return { text: note.text, after: (dispatch) => dispatch.then((value) => { commitNote(note.commit); return value; }) };
       } catch (error) {
@@ -205,11 +207,12 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     reviewSkills<T extends { name: string }>(botId: string, own: T[]): Array<T | {
       name: string; description: string; editable: boolean; enabled: boolean; sha256: string; body?: string | null;
     }> {
+      own = own.filter(skill => skillAllowed(botId, skill.name));
       const bot = store.bot(botId);
       if (mode() === "off" || !bot?.assignedSkills?.length) return own;
       const ownNames = new Set(own.map((skill) => skill.name));
       const shared = resolveBotSkills(botId, bot.assignedSkills)
-        .filter((skill) => !ownNames.has(skill.name))
+        .filter((skill) => !ownNames.has(skill.name) && skillAllowed(botId, skill.name))
         .map((skill) => {
           const canEdit = editable(botId, skill.name);
           return { name: skill.name, description: skill.description, editable: canEdit, enabled: skill.enabled, sha256: skill.sha256,

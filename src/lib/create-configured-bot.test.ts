@@ -45,6 +45,14 @@ describe("configured bot creation", () => {
     expect(f.bodies[1]).not.toHaveProperty("toolScope");
   });
 
+  it("puts imported resource limits in the initial create request", async () => {
+    const f = fixture("ask");
+    f.draft.patch({ skillAccess: [], mcpServers: [] });
+    await createConfiguredBot(f.draft, f.request, persistBotUpdate, f.approvals);
+    expect(f.bodies[0]).toMatchObject({ settings: { skillAccess: [], mcpServers: [] } });
+    expect(f.events).toContain("PUT /api/copilotbot/bots/created/resources");
+  });
+
   it("keeps the server-completed workspace effort when applying draft settings", async () => {
     const selection = { instanceId: "claude", model: "sonnet", effort: "high" as const };
     const f = fixture("ask", 0, selection);

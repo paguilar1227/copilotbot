@@ -7,7 +7,6 @@ import { useBotEditor } from "./BotEditorContext";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { mcpServersForBot, useMcpServers } from "@/lib/mcp-servers";
 import { placeFacts, placeViewFor, usePlaceSeat } from "@/lib/place-view";
 import { shortPath } from "@/lib/short-path";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
@@ -109,80 +108,6 @@ function WorkingFolder({ bot }: { bot: Bot }) {
   );
 }
 
-/**
- * Absent list = all enabled; the first flip writes an explicit list so servers added later never silently reach this
- * bot.
- */
-function McpServersCard({ bot, patch }: { bot: Bot; patch: (patch: { mcpServers: string[] | null }) => void }) {
-  const { dispatch } = useStore();
-  const { servers, error, refresh } = useMcpServers();
-  const mounted = new Set((servers ? mcpServersForBot(servers, bot.mcpServers) : []).map((server) => server.name));
-  const usesAll = bot.mcpServers == null;
-
-  const toggle = (name: string) => {
-    if (!servers || bot.busy || error) return;
-    const current = usesAll ? servers.filter((server) => server.enabled).map((server) => server.name) : [...(bot.mcpServers ?? [])];
-    const next = current.includes(name) ? current.filter((item) => item !== name) : [...current, name];
-    patch({ mcpServers: next });
-  };
-  const openPlugins = () => {
-    dispatch({ type: "toggleSettings", open: false });
-    dispatch({ type: "togglePlugins", open: true, surface: "mcp" });
-  };
-
-  return (
-    <div className="rounded-xl bg-card p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[15px] font-medium text-ink">{t("connectors.tab.mcp")}</div>
-          <div className="mt-0.5 text-[13px] text-ink-secondary">
-            {t("botAccess.mcpDescription")}
-          </div>
-          <ProposalStatus bot={bot} kind="owner" />
-        </div>
-      </div>
-      {error && (
-        <div role="alert" className="mt-3 text-[12px] text-danger">
-          {t("botAccess.mcpRefreshError")} <button type="button" onClick={() => void refresh()} className="underline">{t("connectors.action.retry")}</button>
-        </div>
-      )}
-      {servers === null ? !error && (
-        <div className="mt-3 text-[12px] text-ink-secondary">{t("mcp.loading")}</div>
-      ) : servers.length === 0 ? (
-        <div className="mt-3 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary">{t("botAccess.mcpEmpty")}</div>
-      ) : (
-        <div className="mt-3 divide-y divide-hairline/40 overflow-hidden rounded-lg border border-hairline/40">
-          {servers.map((server) => (
-            <div key={server.name} className="flex items-center justify-between gap-3 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12.5px] text-ink">{server.name}</div>
-                {!server.enabled && <div className="text-[11.5px] text-ink-secondary">{t("botAccess.mcpDisabled")}</div>}
-              </div>
-              <Switch
-                checked={mounted.has(server.name)}
-                disabled={!server.enabled || !!bot.busy || error}
-                aria-label={t("botAccess.mcpAllow", { name: server.name })}
-                onClick={() => toggle(server.name)}
-                className="disabled:cursor-not-allowed"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="mt-3 flex items-center gap-2">
-        <button type="button" onClick={openPlugins} className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-2 text-[13px] text-ink hover:bg-raised-hover">
-          <Plus size={14} /> {t("botAccess.mcpAdd")}
-        </button>
-        {!usesAll && servers && servers.length > 0 && (
-          <button type="button" disabled={!!bot.busy || error} onClick={() => { if (!bot.busy && !error) patch({ mcpServers: null }); }} className="rounded-lg px-2 py-2 text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
-            {t("botAccess.mcpUseAll")}
-          </button>
-        )}
-      </div>
-      {bot.busy && <p className="mt-2 text-[12px] text-ink-secondary">{t("botAccess.mcpBusy")}</p>}
-    </div>
-  );
-}
 
 interface ToolListing {
   name: string;
@@ -656,7 +581,7 @@ export function AccessSection({
         )}
       </div>
 
-      <McpServersCard bot={bot} patch={patch} />
+      <p className="text-[13px] text-ink-secondary">Choose MCP servers in Skills &amp; MCPs.</p>
       <ToolSelectionCard key={bot.id} bot={bot} engineKind={derived.engine?.driverKind} />
 
       <div className="rounded-xl bg-card p-4">
