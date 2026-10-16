@@ -81,6 +81,26 @@ else { console.log(JSON.stringify({accessToken:'fixture-token',expires_on:Date.n
       expect(runner).toHaveBeenCalledTimes(2);
     } finally { vi.useRealTimers(); }
   });
+  it.each([
+    [{ tenant: 'tenant', subscription: 'subscription' }, ['--subscription', 'subscription']],
+    [{ tenant: 'tenant' }, ['--tenant', 'tenant']],
+    [{ subscription: 'subscription' }, ['--subscription', 'subscription']],
+    [{}, []],
+  ])('selects one Azure CLI account context for %j', async (config, selection) => {
+    const runner = vi.fn(async (args: string[]) => {
+      if (args.includes('--tenant') && args.includes('--subscription')) {
+        throw new Error('Please specify only one of subscription and tenant, not both');
+      }
+      return JSON.stringify({ accessToken: 'test-token', expires_on: Date.now() / 1000 + 3600 });
+    });
+    const credential = azureCredential(config, runner);
+    await credential.headers();
+    await credential.headers(true);
+    expect(runner.mock.calls.map(([args]) => args)).toEqual([
+      ['account', 'get-access-token', '--resource', 'https://cognitiveservices.azure.com', '--output', 'json', ...selection],
+      ['account', 'get-access-token', '--resource', 'https://ai.azure.com', '--output', 'json', ...selection],
+    ]);
+  });
   it('sends the Azure TTS deployment with its key, validates audio and hides remote errors', async () => {
     const request = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(new Uint8Array([1, 2]), { headers: { 'content-type': 'audio/mpeg' } }));
     const audio = await azureSpeech({ endpoint, auth: 'api-key', key: 'secret', ttsDeployment: 'voice-deployment' }, 'hello', 'alloy', request);

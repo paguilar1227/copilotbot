@@ -30,8 +30,9 @@ export function azureCredential(config: AzureConfig, runner: AzureRunner = runAz
     if (previous && previous.expires - Date.now() > 60_000) return previous.token;
     if (!pending.has(scope)) pending.set(scope, (async () => {
       const args = ['account', 'get-access-token', '--resource', scope, '--output', 'json'];
-      if (config.tenant) args.push('--tenant', config.tenant);
+      // Azure CLI forbids combining these selectors; a subscription selects its tenant.
       if (config.subscription) args.push('--subscription', config.subscription);
+      else if (config.tenant) args.push('--tenant', config.tenant);
       const result = JSON.parse(await runner(args)) as { accessToken?: string; expires_on?: number; expiresOn?: string };
       const expires = result.expires_on ? Number(result.expires_on) * 1000 : Date.parse(result.expiresOn ?? '');
       if (!result.accessToken || !Number.isFinite(expires) || expires <= Date.now()) throw new Error('Azure CLI returned no valid access token. Sign in with Microsoft again.');
