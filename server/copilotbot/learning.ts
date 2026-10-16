@@ -25,7 +25,7 @@ const candidateSchema = z.object({ id: text, revision: z.number().int(), name: t
 const loadedSchema = z.object({ name: text, version: text, source: text }).strict();
 const runSchema = z.object({ id: text, threadId: text, turnId: text, startedAt: text, completedAt: text.optional(),
   candidateId: text.optional(), caseId: text.optional(), arm: z.enum(["baseline", "candidate"]).optional(), purpose: z.enum(["evaluation", "trial"]).optional(),
-  runtime: z.enum(["live", "fixture"]), environmentHash: text, context: text, reportedModel: text.optional(), ownerNote: z.string().optional(), inputHash: text, loaded: z.array(loadedSchema), read: z.array(text), used: z.array(text),
+  runtime: z.enum(["live", "fixture"]), environmentHash: text, context: text, reportedModel: text.optional(), ownerNote: z.string().optional(), inputHash: text, baseVersions: z.record(z.string(), z.string()).optional(), loaded: z.array(loadedSchema), read: z.array(text), used: z.array(text),
   output: z.string(), tools: z.array(z.object({ name: text, ok: z.boolean(), output: z.string().optional() }).strict()), transportOk: z.boolean().optional(),
   usage: z.object({ input: z.number(), output: z.number(), cachedInput: z.number().optional() }).optional(), cost: z.number().nullable().optional(),
   checks: z.array(checkSchema.extend({ passed: z.boolean() })), ownerVerified: z.boolean().optional(), quality: qualitySchema }).strict();
@@ -40,6 +40,10 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 const clean = (value: string) => redactSecretsInText(value).replace(/[\u202a-\u202e\u2066-\u2069]/g, "");
 const pinCandidateName = (state: State, pin?: Pin) => state.candidates.find(c => c.id === pin?.candidateId)?.name;
 const at = () => new Date().toISOString();
+function referencesPackage(input: string, name: string): boolean {
+  const paths = input.replaceAll("\\", "/").split(/["'\s,{}:;=]+/);
+  return paths.some(path => path === name || path.startsWith(`${name}/`) || path.endsWith(`/${name}`) || path.includes(`/${name}/`));
+}
 let access: (botId: string, name: string) => boolean = () => true;
 export function configureLearningAccess(allowed: typeof access): void { access = allowed; }
 
@@ -282,9 +286,16 @@ export class LearningStore {
       prompt = `\n\nPinned ${pin.purpose} skill: ${c.name}. Use only the version below for this task; do not substitute a library or filesystem copy. This does not grant tools or permissions.\n` + (files.length ? files.map(f => `\nFile: ${f.path}\n${f.content}\n`).join("") : "The baseline has no skill for this task.\n");
     }
     const run: Omit<LearningRun, "turnId"> = { id: randomUUID(), threadId, startedAt: at(), runtime: input.runtime, environmentHash: digest(JSON.stringify({ context: input.context, skills: loaded.filter(s => s.name !== pinCandidateName(state, pin)) })), context: clean(JSON.stringify(input.context)), inputHash: digest(clean(input.text).trim()),
+      baseVersions: Object.fromEntries(this.deps.skills(botId).map(skill => [skill.name, packageVersion(skill.files)])),
       loaded, read: [], used: [], output: "", tools: [], checks: [], quality: "observed",
       ...(pin ? { candidateId: pin.candidateId, caseId: pin.caseId, arm: pin.arm, purpose: pin.purpose } : {}) };
     this.preparing.set(threadId, { botId, pin, run }); return prompt;
+  }
+
+  baseVersionForTurn(botId: string, threadId: string, name: string): string | undefined {
+    const prepared = this.preparing.get(threadId);
+    if (prepared?.botId === botId) return prepared.run.baseVersions?.[name];
+    return this.read(botId).runs.findLast(run => run.threadId === threadId && !run.completedAt)?.baseVersions?.[name];
   }
 
   observe(event: RuntimeEvent): void {
@@ -313,7 +324,7 @@ export class LearningStore {
     } else if (event.type === "item.started" && event.itemType === "tool") {
       active.tools.set(event.itemId ?? event.eventId, event.title ?? "Tool");
       const input = event.input ?? event.summary ?? "";
-      for (const loaded of run.loaded) if (input.includes(`/${loaded.name}/SKILL.md`) && !run.read.includes(loaded.name)) run.read.push(loaded.name);
+      for (const loaded of run.loaded) if (referencesPackage(input, loaded.name) && !run.read.includes(loaded.name)) run.read.push(loaded.name);
     } else if (event.type === "item.completed" && event.itemType === "tool") {
       run.tools.push({ name: active.tools.get(event.itemId ?? "") ?? "Tool", ok: event.ok, ...(event.output ? { output: clean(event.output) } : {}) });
     } else if (event.type === "item.completed" && event.itemType === "assistant_text" && !event.synthetic) {

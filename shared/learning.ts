@@ -61,6 +61,7 @@ export interface LearningRun {
   reportedModel?: string;
   ownerNote?: string;
   inputHash: string;
+  baseVersions?: Record<string, string>;
   loaded: Array<{ name: string; version: string; source: string }>;
   read: string[];
   used: string[];

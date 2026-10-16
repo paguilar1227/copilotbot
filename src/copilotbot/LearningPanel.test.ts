@@ -3,10 +3,10 @@ import { createElement, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LearningPanel } from "./LearningPanel";
-import type { LearningView } from "../../../shared/learning";
+import type { LearningView } from "../../shared/learning";
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), dispatch: vi.fn() }));
-vi.mock("./BotEditorContext", () => ({ useBotEditor: () => ({ request: mocks.request }) }));
+vi.mock("@/components/bot-settings/BotEditorContext", () => ({ useBotEditor: () => ({ request: mocks.request }) }));
 vi.mock("@/state/store", () => ({ useStore: () => ({ dispatch: mocks.dispatch }) }));
 const view = (): LearningView => ({ candidates: [{ id: "c1", name: "weekly-report", phase: "candidate", revision: 2,
   version: "v2", baseVersion: "v1", baseFiles: [{ path: "SKILL.md", content: "old steps" }], files: [{ path: "SKILL.md", content: "new steps" }], baseEnabled: true, baseSource: "learn:previous",
@@ -59,4 +59,15 @@ it("refreshes the surrounding skill list after activation", async () => {
   await act(async () => root.render(createElement(LearningPanel, { botId: "bot", onSkillsChanged: changed })));
   await click("Activate verified version");
   expect(changed).toHaveBeenCalledOnce();
+});
+
+
+it("records real skill names for ordinary task usage", async () => {
+  const v = view(); v.candidates = [];
+  v.runs = [{ id: "run", threadId: "thread", turnId: "turn", startedAt: "now", completedAt: "now", runtime: "live", environmentHash: "hash", context: "{}", inputHash: "input", loaded: [{ name: "weekly-report", version: "v1", source: "learn:owner" }], read: [], used: [], output: "done", tools: [], checks: [], quality: "observed" }];
+  mocks.request.mockResolvedValue(v); await render();
+  const checkbox = node.querySelector('input[type="checkbox"]') as HTMLInputElement;
+  await act(async () => checkbox.click());
+  await click("Verify outcome and isolated environment");
+  expect(mocks.request).toHaveBeenCalledWith("/api/bots/bot/learning/runs/run", { method: "PATCH", body: JSON.stringify({ used: ["weekly-report"], quality: "verified", note: "" }) });
 });

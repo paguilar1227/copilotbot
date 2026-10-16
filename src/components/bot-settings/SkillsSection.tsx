@@ -1,4 +1,4 @@
-import { LearningPanel } from "./LearningPanel";
+import { LearningPanel } from "@/copilotbot/LearningPanel";
 import { BookOpen, Trash2 } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";

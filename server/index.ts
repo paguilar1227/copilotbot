@@ -327,7 +327,7 @@ import { createAzureLiveSession } from "./copilotbot/azure-live.ts";
 import { createAzureGptLiveSession } from "./copilotbot/azure-gpt-live.ts";
 import { azureRoutes } from "./copilotbot/azure-routes.ts";
 import { sectionMemoryKey } from "./section-context.ts";
-import { ResourcePolicies, configureResourceAccess } from "./copilotbot/resource-access.ts";
+import { ResourcePolicies, configureResourceAccess, skillAllowed } from "./copilotbot/resource-access.ts";
 import { resourceRoutes } from "./copilotbot/resource-routes.ts";
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
@@ -398,6 +398,7 @@ import { createSkillsLibraryHost } from "./host/skills-library.ts";
 import { skillExport } from "./skill-export.ts";
 import { pickBotName } from "./names.ts";
 import { botSkillTemplateSchema, newBotDefaultsSchema } from "./new-bot-defaults.ts";
+import { configureLearningAccess } from "./copilotbot/learning.ts";
 import { createLearningHost } from "./copilotbot/learning-host.ts";
 import { learningRoutes } from "./copilotbot/learning-routes.ts";
 import { expandLearnTurnText, learnSource } from "./skill-learn.ts";
@@ -3178,6 +3179,7 @@ const store = new Store(
 );
 const resourcePolicies = new ResourcePolicies(join(DATA_DIR, "resource-policies.json"), sectionMemoryKey);
 configureResourceAccess(id => { const bot = store.bot(id); return bot ? resourcePolicies.effective(bot) : { skills: [], mcpServers: [] }; });
+configureLearningAccess(skillAllowed);
 const skillsHost = createSkillsLibraryHost({ store, cfg, appendSkillRequestCard });
 const { listBotSkills, readBotSkillFile } = skillsHost;
 const highlevelHost = createHighLevelHost({ service: highlevel, dataDir: DATA_DIR, bot: (id) => store.bot(id),
@@ -15261,7 +15263,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
               ...(action === "update" ? { targetName } : {}) });
             skillReview.noteSkillChange(from.id, fromThreadId);
             return json(res, 201, { state: "candidate", candidateId: candidate.id, name: candidate.name,
-              summary: "Saved inactive. Define task checks and verify current/candidate runs in Skills → Learning before activation." });
+              summary: "Saved inactive. Define task checks and verify current/candidate runs in Skills & MCPs → Learning before activation." });
           } catch (error) { return json(res, 422, { error: (error as Error).message }); }
         }
         if (action === "update" && skillsHost.editable(from.id, targetName)) return references.length ? json(res, 400, { error: "A skill shared through the team library cannot keep reference files yet; put that guidance in SKILL.md." }) : json(res, ...skillsHost.harnessUpdate(from, fromThreadId, targetName, skillMd, body.gist, body.base_revision, direct));

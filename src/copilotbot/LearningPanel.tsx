@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { lineDiff } from "../../../shared/line-diff";
-import type { LearningCheck, LearningRun, LearningView } from "../../../shared/learning";
+import { lineDiff } from "../../shared/line-diff";
+import type { LearningCheck, LearningRun, LearningView } from "../../shared/learning";
 import { useStore } from "@/state/store";
-import { useBotEditor } from "./BotEditorContext";
+import { useBotEditor } from "@/components/bot-settings/BotEditorContext";
 
 const button = "rounded-lg border border-hairline px-3 py-1.5 text-[12px] hover:bg-raised disabled:opacity-40";
 const field = "w-full rounded-lg border border-hairline bg-inset p-2 text-[12px] text-ink";
@@ -43,7 +43,8 @@ function ContractForm({ candidate, mutate, busy }: { candidate: Candidate; mutat
 }
 
 function Run({ run, name, mutate, busy, open }: { run: LearningRun; name: string; mutate: Mutate; busy: boolean; open: (thread: string) => void }) {
-  const [used, setUsed] = useState(run.used.includes(name));
+  const [used, setUsed] = useState(run.used);
+  const skillNames = name ? [name] : run.loaded.map(skill => skill.name);
   const [note, setNote] = useState(run.ownerNote ?? "");
   return <details className="mt-2 rounded-lg border border-hairline p-2"><summary>{run.purpose ?? "Task"} · {run.arm ?? "active skills"} · {run.runtime} · {run.quality} · {run.completedAt ? run.transportOk ? "delivered" : "failed" : "in progress"}</summary>
     <p className="my-2 break-all">Run {run.id} · {run.startedAt}{run.completedAt && ` → ${run.completedAt}`}</p>
@@ -54,8 +55,8 @@ function Run({ run, name, mutate, busy, open }: { run: LearningRun; name: string
     <details><summary>Context, loaded/read versions and tools</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify({ context: run.context, loaded: run.loaded, read: run.read, tools: run.tools }, null, 2)}</pre></details>
     {run.completedAt && <div className="mt-2 flex flex-wrap items-center gap-2">
       <label className="w-full">Observed outcome, corrections and environment reset<textarea className={field} value={note} onChange={event => setNote(event.target.value)} /></label>
-      <label><input type="checkbox" checked={used} onChange={event => setUsed(event.target.checked)} /> I observed this skill being used</label>
-      <button className={button} disabled={busy} onClick={() => void mutate(`runs/${run.id}`, { used: used ? [name] : [], quality: "verified", note }, "PATCH")}>Verify outcome and isolated environment</button>
+      <>{skillNames.map(skill => <label key={skill}><input type="checkbox" checked={used.includes(skill)} onChange={event => setUsed(current => event.target.checked ? [...new Set([...current, skill])] : current.filter(value => value !== skill))} /> I observed {skill} being used</label>)}</>
+      <button className={button} disabled={busy} onClick={() => void mutate(`runs/${run.id}`, { used, quality: "verified", note }, "PATCH")}>Verify outcome and isolated environment</button>
       <button className={button} disabled={busy} onClick={() => void mutate(`runs/${run.id}`, { used: [], quality: "disputed" }, "PATCH")}>Dispute run</button>
       {run.runtime === "fixture" && <p>Fixture results test the workflow only; they cannot validate or activate learning.</p>}
     </div>}

@@ -3,7 +3,7 @@
 All commands below use temporary homes; no keys or paid model calls are used.
 
 ```
-PATH=/opt/homebrew/bin:$PATH pnpm exec vitest run --configLoader native server/copilotbot/learning.test.ts src/components/bot-settings/LearningPanel.test.ts server/skill-learn.test.ts server/skill-review.test.ts
+PATH=/opt/homebrew/bin:$PATH pnpm exec vitest run --configLoader native server/copilotbot/learning.test.ts src/copilotbot/LearningPanel.test.ts server/skill-learn.test.ts server/skill-review.test.ts
 PATH=/opt/homebrew/bin:$PATH pnpm exec vitest run --configLoader native server/copilotbot/learning.e2e.test.ts server/skill-review.e2e.test.ts
 ```
 
@@ -15,7 +15,7 @@ and background-review proposals, sends pinned replays through the real chat
 runtime and confirms that fixture results cannot authorize activation. It needs
 permission to bind local ports.
 
-In Bot settings → Skills → Learning, inspect the source evidence and both package
+In Bot settings → Skills & MCPs → Learning, inspect the source evidence and both package
 versions. Add a motivating task and a distinct variation with exact task text,
 checks, a disposable workspace path and reset instructions. Prepare and run each
 arm in its generated conversation, resetting the workspace between runs. Verify

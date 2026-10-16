@@ -34,7 +34,7 @@ afterAll(async () => { await waitForExit(child, { signal: 'SIGINT', graceMs: 30_
   await click('New or share');
   await click('New Bot');
   await poll(snapshot).toContain('Import YAML file');
-  await poll(() => evaluate(`document.querySelector('input[aria-label=\"Import bot YAML file\"]')?.previousElementSibling?.disabled`)).toBe(false);
+  await poll(() => evaluate(`document.querySelector('input[aria-label="Import bot YAML file"]')?.previousElementSibling?.disabled`)).toBe(false);
   const yaml = 'format: copilotbot/bot\nversion: 1\nprofile:\n  name: YAML Reviewer\n  description: Imported safely\n  computer: off\n  approvalMode: ask\nresources:\n  skills: []\n  mcpServers: []\n';
   await evaluate(`(() => { const input = document.querySelector('input[aria-label="Import bot YAML file"]'); const data = new DataTransfer(); data.items.add(new File([${JSON.stringify(yaml)}], 'reviewer.yaml', { type: 'application/yaml' })); input.files = data.files; input.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
   await poll(snapshot).toContain('Loaded reviewer.yaml');
@@ -44,7 +44,7 @@ afterAll(async () => { await waitForExit(child, { signal: 'SIGINT', graceMs: 30_
   expect(await evaluate(`document.querySelector('select[aria-label="MCP servers access"]').value`)).toBe('none');
   await click('Create bot');
   await poll(async () => (await api('/api/bots?messages=0')).bots.length).toBe(before.bots.length + 1);
-  await poll(snapshot).not.toContain('dialog \"New bot\"');
+  await poll(snapshot).not.toContain('dialog "New bot"');
   const added = (await api('/api/bots?messages=0')).bots.find((bot: { name: string }) => bot.name === 'YAML Reviewer');
   expect(added).toMatchObject({ skillAccess: [], mcpServers: [], description: 'Imported safely' });
   await evaluate(`[...document.querySelectorAll('button[aria-label]')].find(el => el.getAttribute('aria-label') === "Open YAML Reviewer's profile").click()`);

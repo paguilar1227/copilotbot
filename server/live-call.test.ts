@@ -172,7 +172,7 @@ describe("live startup context", () => {
     expect(text.split("\n")[0]).toBe("You are CFO, Chief Financial Officer, an AI agent that runs in OpenMausBot on the user's own computer.");
     expect(text).not.toContain("only the voice");
     expect(text).not.toContain("voice of");
-    expect(text).toContain("You receive and hear the user\'s microphone audio directly");
+    expect(text).toContain("You receive and hear the user's microphone audio directly");
     expect(text).toContain("Never ask the user whether you may look something up or check something");
     expect(text).toContain("- The user asks something about you that this conversation does not already answer, for example which AI model you run on.");
     // OpenAI's trained delegation labels stay as they are

@@ -37,7 +37,7 @@ export function learningRoutes(store: Store, learning: LearningStore): RouteHand
         const previous = learning.view(botId).candidates.find(c => c.id === route![1]);
         if (!previous || previous.revision !== input.revision) throw new LearningError("This candidate changed. Refresh before trying again.");
         return json(res, 201, learning.propose(botId, { files: previous.files.map(f => f.path === "SKILL.md" ? { ...f, content: input.skillMd } : f),
-          source: previous.source, author: "owner", gist: input.gist, evidence: previous.evidence, supersedes: previous.id }));
+          source: previous.source, author: "owner", gist: input.gist, evidence: previous.evidence, baseVersion: previous.baseVersion, supersedes: previous.id }));
       }
       route = /^candidates\/([\w-]+)\/replay$/.exec(suffix);
       if (route && method === "POST") {

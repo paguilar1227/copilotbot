@@ -25,12 +25,13 @@ function setup() {
   const get = () => learning.view(botId).candidates.find(c => c.id === candidate.id)!;
   const add = (kind: "motivating" | "variation") => learning.addCase(botId, candidate.id, get().revision, { kind, title: kind, prompt: `${kind} report`, environment: "Reset isolated notes fixture", workspace: root, checks: [{ kind: "output_includes", value: "correct" }] });
   const motivating = add("motivating"), variation = add("variation");
-  const run = (caseId: string, arm: "baseline" | "candidate", output: string, options: { context?: unknown; runtime?: "live" | "fixture"; purpose?: "evaluation" | "trial"; used?: boolean; verify?: boolean; reportedModel?: string } = {}) => {
+  const run = (caseId: string, arm: "baseline" | "candidate", output: string, options: { context?: unknown; runtime?: "live" | "fixture"; purpose?: "evaluation" | "trial"; used?: boolean; verify?: boolean; reportedModel?: string; readPath?: string } = {}) => {
     const threadId = randomUUID(), turnId = randomUUID();
     learning.pin(botId, { threadId, candidateId: candidate.id, caseId, arm, purpose: options.purpose ?? "evaluation" });
     const prompt = learning.prepare(botId, threadId, { text: get().cases.find(c => c.id === caseId)!.prompt, context: options.context ?? { model: "model", tools: ["read"], environment: "fixture-v1" }, runtime: options.runtime ?? "live" });
     const base = { eventId: randomUUID(), threadId, turnId, provider: "test", createdAt: new Date().toISOString() };
     learning.observe({ ...base, type: "turn.started" });
+    if (options.readPath) learning.observe({ ...base, type: "item.started", itemType: "tool", itemId: "read", title: "Read", input: options.readPath });
     if (options.reportedModel) learning.observe({ ...base, type: "session.started", sessionId: "session", model: options.reportedModel });
     learning.observe({ ...base, type: "item.completed", itemType: "assistant_text", text: output });
     learning.observe({ ...base, type: "turn.completed", ok: true, usage: { input: 20, output: 10 } });
@@ -131,7 +132,8 @@ it("integrates the real revision store: preserves references and restores enable
   store.appendMessage(bot.threadId, { role: "user", kind: "text", text: "/learn correct the report" });
   store.appendMessage(bot.threadId, { role: "bot", kind: "text", text: "A verified result", turnId: "previous" });
   const host = createLearningHost(store);
-  const c = host.propose(bot.id, bot.threadId, { files: [{ path: "SKILL.md", content: md("new") }], source: "conversation", gist: "new", author: "explicit_learning" });
+  host.learning.prepare(bot.id, bot.threadId, { text: "/learn correct the report", context: {}, runtime: "fixture" });
+  const c = host.propose(bot.id, bot.threadId, { targetName: "weekly-report", files: [{ path: "SKILL.md", content: md("new") }], source: "conversation", gist: "new", author: "explicit_learning" });
   expect(c.files).toEqual(files("new"));
   expect(readSkillFile(bot.id, c.name)).toBe(md("old"));
   expect(listSkills(bot.id).find(s => s.name === c.name)?.enabled).toBe(false);
@@ -225,4 +227,41 @@ it("does not overwrite an owner's intervening enable/disable decision", () => {
   f.current()[0]!.enabled = false;
   expect(() => f.change("promote")).toThrow(/settings changed/);
   expect(f.applied()).toBe(0);
+});
+
+
+it.each([
+  "/bot/.agents/skills/weekly-report/references/style.md",
+  JSON.stringify({ command: "cat references/style.md", cwd: "/bot/.agents/skills/weekly-report" }),
+  JSON.stringify({ command: "cat references/style.md", cwd: "C:\\bot\\skills\\weekly-report" }),
+])("rejects evaluation and trial runs that access a mutable package: %s", readPath => {
+  const f = setup(); f.pairs();
+  f.run(f.variation.id, "candidate", "correct", { readPath });
+  expect(f.get().evaluation.ready).toBe(false);
+  expect(f.get().evaluation.reasons.join()).toContain("mutable installed copy");
+  const g = setup(); g.pairs(); g.change("validate"); g.change("trial");
+  g.run(g.variation.id, "candidate", "correct", { purpose: "trial", readPath });
+  expect(() => g.change("promote")).toThrow(/verified successful trial/);
+  expect(g.applied()).toBe(0);
+});
+
+it("refuses an explicit learning update if the owner edits any package file after the turn starts", () => {
+  const store = new Store(() => ({ instanceId: "test", model: "test" }));
+  const bot = store.createBot({ name: "Stale learning" });
+  const install = (action: "create" | "update", content: string) => {
+    const stage = stageSkillWrite(bot.id, { action, targetName: "weekly-report", files: files(content), source: "learn:owner" });
+    if ("error" in stage) throw new Error(stage.error);
+    const applied = applyStagedSkillWrite(bot.id, stage.id, { expectedSha256: stage.sha256, expectedReferencesSha256: stage.referencesSha256 ?? null });
+    expect(applied).not.toHaveProperty("error");
+  };
+  install("create", "original");
+  store.appendMessage(bot.threadId, { role: "user", kind: "text", text: "/learn revise weekly-report" });
+  const host = createLearningHost(store);
+  host.learning.prepare(bot.id, bot.threadId, { text: "/learn revise weekly-report", context: {}, runtime: "fixture" });
+  const base = { eventId: "start", threadId: bot.threadId, turnId: "authoring-turn", provider: "test", createdAt: new Date().toISOString() };
+  host.learning.observe({ ...base, type: "turn.started" });
+  install("update", "owner correction");
+  expect(() => host.propose(bot.id, bot.threadId, { targetName: "weekly-report", files: files("stale rewrite"), source: "conversation", gist: "outdated", author: "explicit_learning" })).toThrow(/base skill changed/);
+  expect(readSkillFile(bot.id, "weekly-report")).toBe(md("owner correction"));
+  expect(host.learning.view(bot.id).candidates).toEqual([]);
 });

@@ -1,4 +1,4 @@
-import { LearningPanel } from "./LearningPanel";
+import { LearningPanel } from "@/copilotbot/LearningPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, FileText, Image as ImageIcon, Slack, Smartphone, X } from "lucide-react";
 

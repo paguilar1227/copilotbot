@@ -26,6 +26,12 @@ New bot → **Import YAML file** loads a reviewable draft. Nothing runs until **
 
 These choices control the app's skill index, managed native skill links, skill tools and configured MCP mounts. They are not a filesystem sandbox or a replacement for a CLI's independently configured plugins. Team policies are stored separately from upstream settings, using stable team identifiers that survive renames.
 
+### Evidence-based learning
+
+`/learn` and background skill review save inactive candidates. **Bot settings → Skills & MCPs → Learning** shows the exact package diff, source evidence, task outcomes and version history. Define a motivating task and a distinct variation, then prepare baseline and candidate conversations against the same disposable workspace. Preparation does not run a model or grant tool access. Reset the environment between runs and use mock services for external effects; normal bot permissions still apply when you send the task.
+
+The owner verifies source evidence, actual skill use and outcomes. Comparable real-model runs must pass the task checks and improve on a failing baseline before validation. A matching pinned trial is required before activation. Synthetic fixture results test this flow but never authorize activation or prove model quality. Intervening edits and reads from mutable installed skill packages invalidate the comparison. Rollback restores the previous package and enabled state; rejected lessons remain in the audit history.
+
 ### Azure Foundry
 
 Open Settings → API keys → Azure Foundry. Choose Microsoft Entra ID or an Azure resource API key. Entra uses the existing Azure CLI login, or **Sign in with Microsoft** starts device-code sign-in. This requires Azure CLI on the server. Tenant and subscription can be selected explicitly. Tokens refresh on demand and stay on the server.

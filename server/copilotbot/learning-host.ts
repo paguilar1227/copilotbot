@@ -60,15 +60,21 @@ export function createLearningHost(store: Store) {
     if (!parsed || "error" in parsed) throw new LearningError("Supply a valid SKILL.md.");
     if (input.targetName && input.targetName !== parsed.name) throw new LearningError("An update must retain its skill name.");
     const base = skills(botId).find(s => s.name === parsed.name);
+    if (base && !input.targetName) throw new LearningError("This skill already exists. Read it and request an update.");
+    const expectedBase = input.author === "explicit_learning" && input.targetName
+      ? learning.baseVersionForTurn(botId, threadId, input.targetName) : undefined;
+    if (input.author === "explicit_learning" && input.targetName && !expectedBase) {
+      throw new LearningError("The skill's starting revision was not captured. Start a fresh /learn request before updating it.");
+    }
     if (input.baseSha256 && listSkills(botId).find(s => s.name === parsed.name)?.sha256 !== input.baseSha256) throw new LearningError("The base skill changed after review.");
     const merged = new Map(base?.files.map(f => [f.path, f]) ?? []);
     for (const file of input.files) {
       if (file.path !== "SKILL.md" && !file.content.trim()) merged.delete(file.path);
       else merged.set(file.path, file);
     }
-    const candidate = learning.propose(botId, { ...input, files: [...merged.values()], evidence });
+    const candidate = learning.propose(botId, { ...input, ...(expectedBase ? { baseVersion: expectedBase } : {}), files: [...merged.values()], evidence });
     store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `Learning candidate: ${candidate.name}`, ok: true,
-      summary: `${candidate.gist} Saved inactive. Review evidence and task checks in Bot settings → Skills → Learning.` } });
+      summary: `${candidate.gist} Saved inactive. Review evidence and task checks in Bot settings → Skills & MCPs → Learning.` } });
     return candidate;
   }
   function explicit(threadId: string): boolean {
