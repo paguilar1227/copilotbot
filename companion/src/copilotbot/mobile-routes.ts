@@ -9,7 +9,7 @@ export const mobileRoutes = [
   { method: 'PUT', path: /^\/api\/copilotbot\/resources$/ },
   { method: 'GET', path: /^\/api\/copilotbot\/bots\/[\w-]+\/(?:template|resources)$/ },
   { method: 'PUT', path: /^\/api\/copilotbot\/bots\/[\w-]+\/resources$/ },
-  { method: 'POST', path: /^\/api\/copilotbot\/bot-template$/ },
+  { method: 'POST', path: /^\/api\/copilotbot\/bot-templates?$/ },
   { method: 'GET', path: /^\/api\/bots\/[\w-]+\/learning$/ },
   { method: 'POST', path: /^\/api\/bots\/[\w-]+\/learning\/candidates\/[\w-]+\/(?:validate|trial|promote|rollback|reject|cases|revise|replay)$/ },
   { method: 'PATCH', path: /^\/api\/bots\/[\w-]+\/learning\/candidates\/[\w-]+\/evidence\/[\w-]+$/ },

@@ -635,6 +635,10 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     if (completed) return completed;
     return { text: `One review card is visible: ${String(result.title)}. Nothing has been applied. End this turn; the decision and structured result resume you automatically once. Do not ask again, poll, or repeat this proposal.` };
   }
+  if (name === "import_bot_templates") {
+    const result = await api("/api/internal/import-bot-templates", { method: "POST", body: JSON.stringify(args) });
+    return { text: JSON.stringify(result), ...(result.error ? { isError: true } : {}) };
+  }
   if (name === "create_bot") {
     const botName = String(args.name ?? "").trim();
     const role = String(args.role ?? "").trim();

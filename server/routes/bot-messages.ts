@@ -510,7 +510,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
             behavior,
           }, auth.kind === "session" && cloudOwnerSession(auth))) return;
         }
-        const setupCard = store.messagesFor(threadId).find((message) => message.card?.requestId === requestId && message.card.teamSetupRequest);
+        const setupCard = store.messagesFor(threadId).find((message) => message.card?.requestId === requestId && (message.card.teamSetupRequest || message.card.templateImportRequest));
         if (setupCard) {
           const setupBotId = setupCard.from?.botId ?? store.botByThread(threadId)?.id;
           if (!setupBotId) return json(res, 400, { error: "This team setup has no valid owner" });

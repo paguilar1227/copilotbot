@@ -5,7 +5,7 @@ import type { Store, BotRecord } from '../store.ts';
 import { listSkills, resolveBotSkills, syncSkillLinks } from '../skills.ts';
 import { availableLibrarySkills } from '../skill-library.ts';
 import { resourceAccessSchema, unrestricted, type ResourceAccess, type ResourcePolicies } from './resource-access.ts';
-import { exportBotTemplate, parseBotTemplate } from './bot-templates.ts';
+import { exportBotTemplate, parseBotTemplate, previewBotTemplates, type BotTemplate } from './bot-templates.ts';
 import { allMcpServers } from '../plugins/contributions.ts';
 
 function widens(previous: ResourceAccess, next: ResourceAccess): boolean {
@@ -28,20 +28,26 @@ export function resourceRoutes(deps: {
       mcpServers: Object.keys(allMcpServers(cfg.mcpServers)).map(name => ({ name, enabled: name in customMcpServers(cfg) })),
     };
   };
+  const warnings = (template: BotTemplate) => {
+    const available = catalog([]);
+    return [
+      ...[...new Set([...template.skills, ...(template.resources.skills ?? [])])].filter(name => !available.skills.some(skill => skill.name === name && skill.enabled && skill.origin === "library")).map(name => `Skill “${name}” is missing or disabled. Install and review it before use.`),
+      ...(template.resources.mcpServers ?? []).filter(name => !available.mcpServers.some(server => server.name === name && server.enabled)).map(name => `MCP server “${name}” is missing or disabled. Configure it before use.`),
+    ];
+  };
   return async ({ req, res, path, method, url, auth, json, readBody }) => {
     if (!path.startsWith('/api/copilotbot/')) return PASS;
-    if (!['/api/copilotbot/bot-template', '/api/copilotbot/resources'].includes(path) && !/^\/api\/copilotbot\/bots\/[\w-]+\/(?:template|resources)$/.test(path)) return PASS;
+    if (!['/api/copilotbot/bot-template', '/api/copilotbot/bot-templates', '/api/copilotbot/resources'].includes(path) && !/^\/api\/copilotbot\/bots\/[\w-]+\/(?:template|resources)$/.test(path)) return PASS;
     if (!auth.scopes.includes('admin')) return json(res, 403, { error: 'Managing templates and resources requires admin access.' });
     try {
       if (path === '/api/copilotbot/bot-template' && method === 'POST') {
         const body = z.object({ yaml: z.string() }).strict().parse(await readBody(req));
         const parsed = parseBotTemplate(body.yaml);
-        const available = catalog([]);
-        const warnings = [
-          ...[...new Set([...parsed.template.skills, ...(parsed.template.resources.skills ?? [])])].filter(name => !available.skills.some(skill => skill.name === name && skill.enabled && skill.origin === "library")).map(name => `Skill “${name}” is missing or disabled. Install and review it before use.`),
-          ...(parsed.template.resources.mcpServers ?? []).filter(name => !available.mcpServers.some(server => server.name === name && server.enabled)).map(name => `MCP server “${name}” is missing or disabled. Configure it before use.`),
-        ];
-        return json(res, 200, { defaults: parsed.defaults, warnings });
+        return json(res, 200, { defaults: parsed.defaults, warnings: warnings(parsed.template) });
+      }
+      if (path === '/api/copilotbot/bot-templates' && method === 'POST') {
+        const body = z.object({ files: z.array(z.object({ filename: z.string().min(1), yaml: z.string() }).strict()).min(1) }).strict().parse(await readBody(req));
+        return json(res, 200, { templates: previewBotTemplates(body.files, warnings) });
       }
       const match = path.match(/^\/api\/copilotbot\/bots\/([\w-]+)\/(template|resources)$/);
       const bot = match ? store.bot(match[1]) : undefined;

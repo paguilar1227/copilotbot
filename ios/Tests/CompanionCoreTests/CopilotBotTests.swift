@@ -19,6 +19,14 @@ final class CopilotBotTests: XCTestCase {
         XCTAssertEqual(preview.creationBody.object["template"], preview.defaults)
         XCTAssertEqual(preview.creationBody.object["useDefaults"], .bool(false))
     }
+    func testTemplateBatchKeepsValidDocumentsAndDiagnostics() throws {
+        let json = #"{"templates":[{"id":"0:1","filename":"bots.yaml","document":1,"defaults":{"profile":{"name":"Alpha"}},"diagnostics":[],"warnings":[]},{"id":"0:2","filename":"bots.yaml","document":2,"diagnostics":[{"path":"profile.name","message":"Required","line":8,"column":3}],"warnings":[]}]}"#
+        let batch = try JSONDecoder().decode(BotTemplateBatch.self, from: Data(json.utf8))
+        XCTAssertEqual(batch.templates.count, 2)
+        XCTAssertEqual(batch.templates[0].preview?.name, "Alpha")
+        XCTAssertNil(batch.templates[1].preview)
+        XCTAssertEqual(batch.templates[1].diagnostics.first?.description, "profile.name (line 8): Required")
+    }
     func testLiveSupportsAzureRealtimeCaptionsAndSettings() throws {
         let json = #"{"provider":"azure","configured":true,"voice":"marin"}"#
         let settings = try JSONDecoder().decode(LiveSettings.self, from: Data(json.utf8))

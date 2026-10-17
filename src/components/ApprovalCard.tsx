@@ -59,8 +59,9 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
   if (card.expired === true) return t("approval.status.expired");
   if (!card.answered) return undefined;
   if (card.undone === true) return t("approval.status.undone");
-  const isProposal = Boolean(card.routineRequest || card.skillRequest || card.profileRequest || card.modelRequest || card.teamSetupRequest);
+  const isProposal = Boolean(card.routineRequest || card.skillRequest || card.profileRequest || card.modelRequest || card.teamSetupRequest || card.templateImportRequest);
   if (card.answered !== "allow") return card.teamSetupRequest?.suggestion ? t("approval.status.notNow") : isProposal ? t("approval.status.cancelled") : t("approval.status.denied");
+  if (card.templateImportRequest) return card.title;
   if (card.teamSetupRequest) return card.teamSetupRequest.deletion ? "Bot deleted" : "Team setup applied";
   const routineAction = card.routineRequest?.operation.action;
   if (routineAction) return t(ROUTINE_SETTLED_LABEL[routineAction]);
@@ -388,7 +389,7 @@ export function ApprovalCard({
   const isRoutineRequest = Boolean(card.routineRequest);
   const isSkillRequest = Boolean(card.skillRequest);
   const isProfileRequest = Boolean(card.profileRequest);
-  const isTeamSetup = Boolean(card.teamSetupRequest);
+  const isTeamSetup = Boolean(card.teamSetupRequest || card.templateImportRequest);
   const routineAction = card.routineRequest?.operation.action;
   const skillAction = card.skillRequest?.action;
   const heldNote = tFromServer(card.heldCode, card.held);

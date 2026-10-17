@@ -601,7 +601,8 @@ import { ROUTES, dispatchRoutes } from "./routes/table.ts";
 import { createHostedSlackRoutes } from "./routes/hosted-slack.ts";
 import { createBotPresetRoutes } from "./routes/bot-presets.ts";
 import { createBotMemoryRoutes } from "./routes/bot-memory.ts";
-import { createBotCreateRoutes } from "./routes/bots-create.ts";
+import { TemplateImportRequests } from "./copilotbot/template-import-requests.ts";
+import { createBotFromBody, createBotCreateRoutes, type BotCreateRouteDeps } from "./routes/bots-create.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createBotPatchRoutes } from "./routes/bot-patch.ts";
 import { createBotLifecycleRoutes } from "./routes/bot-lifecycle.ts";
@@ -2171,6 +2172,8 @@ const teamSetupDecisionText = (request: TeamSetupRequest): string => {
     ? " The user chose Not now for this suggested specialist. Do not suggest another specialist in this conversation unless they ask for one." : "";
   return `OpenMausBot team setup decision ${request.requestId}: ${JSON.stringify(request.result)}. Report this exact result and continue the user's already requested work. Do not ask for confirmation again or repeat this setup/deletion. A denied or cancelled operation did not authorize any substitute action. Existing thread models were not changed.${notNow}`;
 };
+const templateImportDecisionText = (request: import("../shared/bot-template.ts").TemplateImportRequest): string =>
+  `Bot template import result: ${JSON.stringify({ state: request.result, bots: request.entries.map(({ filename, state, botId, error, warnings }) => ({ filename, state, botId, error, warnings })) })}. Report this result. Do not repeat the import or retry successful entries.`;
 const connectionUpdateText = (labels: readonly string[]): string =>
   `OpenMausBot connection update: the user securely connected ${labels.join(", ")}. Continue the task that paused for this connection. Do not ask them to connect it again.`;
 const credentialUpdateText = (label: string, outcome: "provided" | "dismissed"): string => outcome === "provided"
@@ -2185,6 +2188,10 @@ function resumableCards(threadId: string, since: number, memberId?: string): Arr
     const card = message.card;
     if (card?.teamSetupRequest && !card.teamSetupRequest.resumed && (card.teamSetupRequest.result || (!card.answered && !card.dismissed && !card.expired))) {
       open.push({ id: message.id, waits: `team setup decision: ${card.title}` });
+      continue;
+    }
+    if (card?.templateImportRequest && !card.templateImportRequest.resumed && (card.templateImportRequest.result || (!card.answered && !card.dismissed && !card.expired))) {
+      open.push({ id: message.id, waits: `bot import decision: ${card.title}` });
       continue;
     }
     const connector = message.connector;
@@ -2225,6 +2232,12 @@ function reconcileParkedNode(node: HandoffView): boolean {
     if (request?.result) {
       if (!coordinator.answerNode(node.id, teamSetupDecisionText(request))) return false;
       if (!request.resumed) store.patchMessage(node.threadId, message.id, { card: { ...message.card!, teamSetupRequest: { ...request, resumed: true } } });
+      return true;
+    }
+    const imported = message.card?.templateImportRequest;
+    if (imported?.result) {
+      if (!coordinator.answerNode(node.id, templateImportDecisionText(imported))) return false;
+      if (!imported.resumed) store.patchMessage(node.threadId, message.id, { card: { ...message.card!, templateImportRequest: { ...imported, resumed: true } } });
       return true;
     }
     if (message.connector) {
@@ -10139,7 +10152,26 @@ const teamSetupRequests = new TeamSetupRequestService({
   },
 });
 
+let botCreationDeps: BotCreateRouteDeps;
+const templateImports = new TemplateImportRequests({
+  store, canPersist: proposalPersistence, canAccessTeam,
+  create: (template, validateOnly) => createBotFromBody(botCreationDeps, { template, useDefaults: false, requireAvailableModel: Boolean(template.profile.modelSelection), ...(template.profile.modelSelection ? { modelSelection: template.profile.modelSelection } : {}) }, { kind: "loopback", scopes: ["admin"] }, validateOnly),
+});
+
 async function resolveAndSendTeamSetup(res: ServerResponse, args: { botId: string; threadId: string; requestId: string; behavior: string }, ownerReview: boolean): Promise<boolean> {
+  const importCard = store.messagesFor(args.threadId).find(item => item.card?.requestId === args.requestId && item.card.templateImportRequest)?.card;
+  if (importCard) {
+    if (args.behavior === "allow" && !ownerReview) { json(res, 403, { error: "Approve bot imports from the desktop app or a paired Full-access device. In a local browser, wait until every bot is idle." }); return true; }
+    const resolved = await templateImports.resolve(args);
+    if (!resolved) return false;
+    if (!resolved.duplicate) appendDecision(DATA_DIR, { threadId: args.threadId, requestId: args.requestId, botId: args.botId, tool: "import_bot_templates", summary: importCard.title, decision: args.behavior === "allow" ? "user-approved" : "user-denied", source: "user" });
+    const current = store.messagesFor(args.threadId).find(item => item.id === resolved.messageId);
+    if (current?.card?.templateImportRequest?.result && !current.card.templateImportRequest.resumed && answerCardNode(args.threadId, current.id, templateImportDecisionText(resolved.request))) {
+      store.patchMessage(args.threadId, current.id, { card: { ...current.card, templateImportRequest: { ...current.card.templateImportRequest, resumed: true } } });
+    }
+    json(res, 200, { ok: true, outcome: resolved.request.result === "applied" ? "allowed-once" : "rejected", result: resolved.request, alreadySettled: resolved.duplicate });
+    return true;
+  }
   const card = store.messagesFor(args.threadId).find((item) => item.card?.requestId === args.requestId && item.card.teamSetupRequest)?.card;
   if (!card) return false;
   if (args.behavior === "allow" && !ownerReview) { json(res, 403, { error: "Approve team setup or deletion from the desktop app or a paired Full-access device. In a local browser, wait until every bot is idle." }); return true; }
@@ -12407,7 +12439,7 @@ function proposalPersistence(botId: string, threadId: string, opensCard = true) 
   if (!opensCard || fullAccessForSource(botId, threadId)) return { ok: true as const };
   const openRequests = store.activePath(threadId).filter(
     (message) =>
-      (message.card?.routineRequest?.botId === botId || message.card?.profileRequest?.botId === botId || message.card?.modelRequest?.botId === botId || message.card?.teamSetupRequest?.botId === botId) &&
+      (message.card?.routineRequest?.botId === botId || message.card?.profileRequest?.botId === botId || message.card?.modelRequest?.botId === botId || message.card?.teamSetupRequest?.botId === botId || message.card?.templateImportRequest?.botId === botId) &&
       !message.card.answered &&
       !message.card.dismissed && !message.card.expired,
   ).length;
@@ -13664,14 +13696,15 @@ ROUTES.push(createThreadRoutes({
   pageSize, messagePage, messageWindow, publicBotQueuedMessages, publicGroupState, wireBot, wireTask,
   botComputerControlSnapshot, messageFileRootsForThread, viewerFor, visibleTo, coordinator, groupThreadIsWorking,
 }));
-ROUTES.push(createBotCreateRoutes({
+botCreationDeps = {
   store, cfg, presetStore, orgInstallStatuses,
   hostedWorkspace: HOSTED_WORKSPACE, hostedFullAccessRefusal: HOSTED_FULL_ACCESS_REFUSAL, desktopManaged: DESKTOP_MANAGED,
   maxWorkspaceBots: MAX_WORKSPACE_BOTS, cloudOwnerKey: CLOUD_OWNER_KEY,
   hostedModels, cloudRoutineAuthors,
   routines: () => routines,
   storedAvatarExists, defaultSelection, checkedModelSelection, cloudOwnerSession, wireBot,
-}));
+};
+ROUTES.push(createBotCreateRoutes(botCreationDeps));
 ROUTES.push(createBotSettingsRoutes({
   store, cfg, registry, commandAllowlist, commandAllowlistDrivers: COMMAND_ALLOWLIST_DRIVERS,
   cloudHome: Boolean(CLOUD_HOME), cloudOwnerProfileFields: CLOUD_OWNER_PROFILE_FIELDS,
@@ -15112,6 +15145,15 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
             state: instance.snapshot.state, models: instance.models, effortLevels: instance.capabilities?.effortLevels ?? [] })),
           scope: "Bot model defaults apply to groups and new threads; existing threads retain their models. Full Access applies requested team setup immediately; other modes return a review card. Existing unauthorized teams remain outside this Chief's scope.",
         });
+      }
+      if (method === "POST" && path === "/api/internal/import-bot-templates") {
+        const body = await readInternalBody();
+        const sender = internalSender;
+        const owner = connectorThread(sender.id, internalCapability.threadId);
+        if (!owner || sender.hidden) return json(res, 403, { error: "Source conversation no longer belongs to this bot" });
+        const proposed = await templateImports.propose(sender.id, internalCapability.threadId, body,
+          owner.group ? { botId: sender.id, name: sender.name, color: sender.color } : undefined, () => internalCapabilityIsActive(internalCapability));
+        return json(res, 200, proposed);
       }
       if (method === "POST" && path === "/api/internal/team-setup-requests") {
         const parsed = z.object({ fromBotId: z.string().optional(), fromThreadId: z.string().optional(), plan: z.unknown() }).strict().safeParse(await readInternalBody());

@@ -11,6 +11,7 @@ import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { botCreated } from "@/lib/product-events";
 import { visibilityFromForm, type VisibilityMode } from "./bot-settings/VisibilitySection";
 import type { NewBotDefaults } from "../../shared/new-bot-defaults";
+import type { BotTemplatePreview } from "../../shared/bot-template";
 import type { Routine } from "@/lib/routines";
 import { IdentitySection } from "./bot-settings/IdentitySection";
 import { SoulSection } from "./bot-settings/SoulSection";
@@ -80,17 +81,34 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
   const fileInput = useRef<HTMLInputElement>(null);
   const [imported, setImported] = useState("");
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
-  const importTemplate = async (file: File) => {
+  const [imports, setImports] = useState<Array<BotTemplatePreview & { created?: string }>>([]);
+  const [importId, setImportId] = useState<string>();
+  const loadImport = (item: BotTemplatePreview) => {
+    if (!item.defaults) return;
+    const defaults = structuredClone(item.defaults);
+    if (!defaults.profile.modelSelection) defaults.profile.modelSelection = draft.bot.modelSelection;
+    if (section !== undefined) defaults.profile.section = section;
+    setDraft(new BotCreationDraft(defaults, () => render(value => value + 1)));
+    setImportId(item.id); setImported(`${item.filename} · document ${item.document}`);
+    setImportWarnings(item.warnings); setActive("Identity"); setError("");
+  };
+  const importTemplates = async (files: File[]) => {
     setSaving(true); setError("");
-    try {
-      if (file.size > 900_000) throw new Error("Bot template must fit within 900 KB");
-      const result = await api<{ defaults: NewBotDefaults; warnings: string[] }>("/api/copilotbot/bot-template", { method: "POST", body: JSON.stringify({ yaml: await file.text() }) });
-      if (!result.defaults.profile.modelSelection) result.defaults.profile.modelSelection = draft.bot.modelSelection;
-      if (section !== undefined) result.defaults.profile.section = section;
-      setDraft(new BotCreationDraft(result.defaults, () => render(value => value + 1)));
-      setImported(file.name); setImportWarnings(result.warnings); setActive("Identity");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setSaving(false); }
+    const results: Array<BotTemplatePreview & { created?: string }> = [];
+    for (const [index, file] of files.entries()) {
+      try {
+        if (file.size > 900_000) throw new Error("Bot template must fit within 900 KB");
+        const result = await api<{ templates: BotTemplatePreview[] }>("/api/copilotbot/bot-templates", { method: "POST", body: JSON.stringify({ files: [{ filename: file.name, yaml: await file.text() }] }) });
+        results.push(...result.templates.map(item => ({ ...item, id: `${index}:${item.document}`, ...(item.defaults ? { defaults: { ...item.defaults, routines: item.defaults.routines.map(routine => ({ ...routine, enabled: false })) } } : {}) })));
+      } catch (cause) {
+        results.push({ id: `${index}:1`, filename: file.name, document: 1, warnings: [], diagnostics: [{ path: "file", message: cause instanceof Error ? cause.message : String(cause) }] });
+      }
+    }
+    if (!alive.current) return;
+    setImports(results); setImportId(undefined); setImported(""); setImportWarnings([]);
+    const first = results.find(item => item.defaults);
+    if (first) loadImport(first);
+    setSaving(false);
   };
   const [localSaving, setSaving] = useState(false);
   const saving = localSaving || parent.state.botCreationPending;
@@ -105,6 +123,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
   const dialog = useRef<HTMLDivElement>(null);
   const closeRef = useRef(() => {});
   closeRef.current = () => {
+    if (savingRef.current) return;
     if (onClose) onClose();
     else parent.dispatch({ type: "toggleNewBot", open: false });
   };
@@ -150,13 +169,14 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
     return () => { window.removeEventListener("keydown", onKey); if (previous?.isConnected) previous.focus(); };
   }, []);
   const save = async () => {
-    if (!ready || savingRef.current || parent.state.botCreationPending) return;
+    if (!ready || savingRef.current || parent.state.botCreationPending || (imports.length > 0 && !imports.some(item => item.id === importId && !item.created && item.defaults))) return;
     if (!defaultsMode && draft.bot.approvalMode === "auto" && draft.bot.computer === "local" && !draft.consent.acknowledgeLocalAuto) { setWarning("local"); return; }
     const visibility = choosesVisibility ? visibilityFromForm(audience, people) : null;
     if (visibility && !visibility.ok) { setError(t("botSettings.visibility.needPeople")); return; }
     savingRef.current = true; setSaving(true); setError("");
     parent.dispatch({ type: "botCreationPending", on: true });
     try {
+      let continueImport = false;
       if (defaultsMode) await api("/api/config", { method: "PATCH", body: JSON.stringify({ newBotDefaults: await preparedBotTemplate(draft) }) });
       else {
         const { bot, warnings } = await createConfiguredBot(draft, undefined, undefined, undefined, visibility?.ok ? visibility.visibility : undefined);
@@ -165,13 +185,61 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
         if (warnings.length) parent.dispatch({ type: "error", message: warnings.join("\n") });
         try { await onCreated?.(bot); }
         catch (cause) { parent.dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }); }
+        if (imports.length) {
+          const updated = imports.map(item => item.id === importId ? { ...item, created: bot.name } : item);
+          setImports(updated);
+          const next = updated.find(item => item.defaults && !item.created);
+          setImportId(undefined);
+          if (next) loadImport(next);
+          continueImport = true;
+        }
       }
-      savingRef.current = false; if (alive.current) closeRef.current();
+      savingRef.current = false; if (alive.current && !continueImport) closeRef.current();
     } catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : String(cause)); }
     finally {
       savingRef.current = false;
       parent.dispatch({ type: "botCreationPending", on: false });
       if (alive.current) setSaving(false);
+    }
+  };
+  const createBatch = async () => {
+    if (savingRef.current || saving) return;
+    const visibility = choosesVisibility ? visibilityFromForm(audience, people) : null;
+    if (visibility && !visibility.ok) { setError(t("botSettings.visibility.needPeople")); return; }
+    savingRef.current = true; setSaving(true); setError("");
+    parent.dispatch({ type: "botCreationPending", on: true });
+    const updated = imports.map(item => item.id === importId ? { ...item, defaults: draft.export() } : { ...item });
+    try {
+      for (const item of updated) {
+        if (!item.defaults || item.created) continue;
+        const defaults = structuredClone(item.defaults);
+        if (!defaults.profile.modelSelection) defaults.profile.modelSelection = draft.bot.modelSelection;
+        if (section !== undefined) defaults.profile.section = section;
+        if (defaults.profile.approvalMode === "auto" && defaults.profile.computer === "local") {
+          loadImport(item);
+          setError(`${item.filename} requires reviewing its local Auto permissions individually. Imported bots will not be repeated.`); break;
+        }
+        const next = new BotCreationDraft(defaults, () => {});
+        try {
+          const result = await createConfiguredBot(next, undefined, undefined, undefined, visibility?.ok ? visibility.visibility : undefined);
+          item.created = result.bot.name;
+          parent.dispatch({ type: "botAdded", bot: result.bot, preserveSelection });
+          if (result.warnings.length) parent.dispatch({ type: "error", message: result.warnings.join("\n") });
+          botCreated("template");
+          try { await onCreated?.(result.bot); }
+          catch (cause) { parent.dispatch({ type: "error", message: cause instanceof Error ? cause.message : String(cause) }); }
+          setImports([...updated]);
+        } catch (cause) {
+          loadImport(item);
+          setError(`${item.filename}: ${cause instanceof Error ? cause.message : String(cause)}. Earlier successful imports will not be repeated.`);
+          break;
+        } finally { next.dispose(); }
+      }
+      setImports([...updated]);
+      if (updated.every(item => !item.defaults || item.created)) setImportId(undefined);
+    } finally {
+      savingRef.current = false; setSaving(false);
+      parent.dispatch({ type: "botCreationPending", on: false });
     }
   };
   const bot = draft.bot;
@@ -202,11 +270,26 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-medium text-ink">Create a new bot</span>
           <span className="text-[13px] text-ink-secondary">or</span>
-          <button type="button" disabled={!ready || saving} onClick={() => fileInput.current?.click()} className="flex items-center gap-2 rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-40"><Upload size={14} />Import YAML file</button>
-          <input ref={fileInput} type="file" accept=".yaml,.yml,application/yaml,text/yaml" className="hidden" aria-label="Import bot YAML file" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importTemplate(file); }} />
+          <button type="button" disabled={!ready || saving} onClick={() => fileInput.current?.click()} className="flex items-center gap-2 rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-40"><Upload size={14} />Import YAML files</button>
+          <input ref={fileInput} type="file" multiple accept=".yaml,.yml,application/yaml,text/yaml" className="hidden" aria-label="Import bot YAML files" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void importTemplates(files); }} />
         </div>
         {imported && <p role="status" className="mt-2 text-[12px] text-ink-secondary">Loaded {imported}. Review the settings below, then create the bot.</p>}
         {importWarnings.map(message => <p key={message} className="mt-1 text-[12px] text-warning">{message}</p>)}
+        {imports.length > 0 && <div className="mt-2 text-[12px]">
+          <p role="status" className="text-ink-secondary">{imports.filter(item => item.created).length} imported · {imports.filter(item => item.defaults && !item.created).length} ready · {imports.filter(item => !item.defaults).length} invalid. Review and create each ready template. Schedules start paused.</p>
+          <ul aria-label="Template import results" className="mt-2 max-h-36 space-y-2 overflow-y-auto rounded-lg bg-inset p-2">
+            {imports.map(item => <li key={item.id} className="break-words">
+              {item.defaults && !item.created ? <button type="button" disabled={saving} aria-current={item.id === importId ? "true" : undefined} className="text-accent underline disabled:opacity-40" onClick={() => {
+                if (item.id === importId) return;
+                setImports(current => current.map(entry => entry.id === importId ? { ...entry, defaults: draft.export() } : entry));
+                loadImport(item);
+              }}>{item.filename} · {item.defaults.profile.name} · Review</button> : <span className={item.created ? "text-ink-secondary" : "text-danger"}>{item.filename} · document {item.document} · {item.created ? `Imported ${item.created}` : "Invalid"}</span>}
+              {item.defaults && !item.created && <details className="mt-1 text-ink-secondary"><summary className="cursor-pointer">All settings</summary><pre className="max-h-40 overflow-auto whitespace-pre-wrap">{JSON.stringify(item.id === importId ? draft.export() : item.defaults, null, 2)}</pre></details>}
+              {item.diagnostics.map((problem, index) => <p role="alert" key={index} className="text-danger">{problem.path}{problem.line ? ` (line ${problem.line}, column ${problem.column})` : ""}: {problem.message}</p>)}
+            </li>)}
+          </ul>
+          <button type="button" disabled={saving || !imports.some(item => item.defaults && !item.created)} onClick={() => void createBatch()} className="mt-2 rounded-lg bg-accent px-3 py-2 text-white disabled:opacity-40">Create all ready bots ({imports.filter(item => item.defaults && !item.created).length})</button>
+        </div>}
       </div>}
         {choosesVisibility && (
           <div className="flex flex-wrap items-center gap-2 px-5 pt-3 text-[13px] text-ink-secondary" data-new-bot-visibility>
@@ -241,7 +324,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
         </nav>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {!ready && !error && <div role="status" className="flex items-center gap-2 text-[13px] text-ink-secondary"><Loader2 size={16} className="animate-spin" />{t("newBot.loading")}</div>}
-          {ready && <fieldset disabled={saving} className="min-w-0">
+          {ready && <fieldset disabled={saving || (imports.length > 0 && !importId)} className="min-w-0">
             <BotEditorStore value={scopedStore}><BotEditorContext.Provider value={{ request: draft.request, draft: true, uploadAvatar: draft.uploadAvatar }}>
               <DraftSection active={active} draft={draft} defaultsMode={defaultsMode} />
             </BotEditorContext.Provider></BotEditorStore>
@@ -250,10 +333,10 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
       </div>
       {error && <p role="alert" className="max-h-24 overflow-y-auto border-t border-hairline/40 px-5 py-3 text-[13px] text-danger">{error}</p>}
       <div className="flex shrink-0 justify-end gap-2 border-t border-hairline/40 px-5 py-3">
-        <button type="button" onClick={() => closeRef.current()} className="rounded-lg px-4 py-2 text-[13px] text-ink-secondary hover:bg-control">{t("common.cancel")}</button>
-        <button type="button" disabled={!ready || saving || (!defaultsMode && !bot.name.trim())} onClick={() => void save()}
+        <button type="button" onClick={() => closeRef.current()} className="rounded-lg px-4 py-2 text-[13px] text-ink-secondary hover:bg-control">{imports.length ? "Done" : t("common.cancel")}</button>
+        <button type="button" disabled={!ready || saving || (imports.length > 0 && !importId) || (!defaultsMode && !bot.name.trim())} onClick={() => void save()}
           className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2 text-[13px] font-medium text-white hover:brightness-110 disabled:opacity-40">
-          {saving && <Loader2 size={15} className="animate-spin" />}{t(defaultsMode ? "newBot.saveDefaults" : "newBot.create")}
+          {saving && <Loader2 size={15} className="animate-spin" />}{imports.length ? "Create reviewed bot" : t(defaultsMode ? "newBot.saveDefaults" : "newBot.create")}
         </button>
       </div>
       <LocalComputerAutoWarning open={warning === "local"} onCancel={() => setWarning(null)} onConfirm={() => { draft.consent.acknowledgeLocalAuto = true; setWarning(null); void save(); }} />

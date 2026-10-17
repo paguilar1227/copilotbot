@@ -160,3 +160,15 @@ describe("remembering exact command approvals", () => {
     expect(row).toMatch(/<svg[^>]*class="[^"]*self-center[^"]*"/);
   });
 });
+
+it('offers explicit import and cancel actions without reusable grants for bot templates', () => {
+  const result = view({ tool: 'import_bot_templates', title: 'Import 2 bots?', options: ['Import bots', 'Cancel'],
+    templateImportRequest: { botId: bot.id, threadId: 'thread-1', entries: [] } });
+  expect(result.html).toContain('Import bots');
+  expect(result.html).toContain('Cancel');
+  expect(result.html).not.toContain('Always allow');
+  result.buttons.find(button => button.props.children === 'Cancel')!.props.onClick!();
+  expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'deny' }));
+  result.buttons.find(button => button.props.children === 'Import bots')!.props.onClick!();
+  expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'allow', always: undefined }));
+});

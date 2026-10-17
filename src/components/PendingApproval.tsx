@@ -56,7 +56,7 @@ export function pendingApprovals(messages: Message[]): Pending[] {
 }
 
 export function spokenApprovalPrompt(pending: Pending, requester: string): string {
-  if (pending.message.card?.teamSetupRequest) return `${requester}: ${pending.message.card.title} Review the details and choose ${pending.message.card.options[0]} or ${pending.message.card.options[1] ?? "Cancel"}.`;
+  if (pending.message.card?.teamSetupRequest || pending.message.card?.templateImportRequest) return `${requester}: ${pending.message.card.title} Review the details and choose ${pending.message.card.options[0]} or ${pending.message.card.options[1] ?? "Cancel"}.`;
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
   const isProfileRequest = isProfileApproval(pending);
@@ -86,7 +86,7 @@ export function spokenApprovalPrompt(pending: Pending, requester: string): strin
 }
 
 function label(pending: Pending): string {
-  if (pending.message.card?.teamSetupRequest) return pending.message.card.title;
+  if (pending.message.card?.teamSetupRequest || pending.message.card?.templateImportRequest) return pending.message.card.title;
   if (isSkillApproval(pending)) {
     return pending.message.card?.skillRequest?.action === "update"
       ? t("approval.label.updateSkill")
@@ -124,7 +124,7 @@ function firstLine(text: string): string {
 function isDurable(pending: Pending): boolean {
   const card = pending.message.card;
   return isSkillApproval(pending) || isRoutineApproval(pending) || isProfileApproval(pending) ||
-    Boolean(card?.teamSetupRequest) || Boolean(card?.modelRequest);
+    Boolean(card?.teamSetupRequest || card?.templateImportRequest) || Boolean(card?.modelRequest);
 }
 
 function rowText(pending: Pending, botName?: string): { line: string; inline?: string } {
@@ -263,7 +263,7 @@ export function PendingApprovalActions({
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
   const isProfileRequest = isProfileApproval(pending);
-  const isTeamSetup = Boolean(pending.message.card?.teamSetupRequest);
+  const isTeamSetup = Boolean(pending.message.card?.teamSetupRequest || pending.message.card?.templateImportRequest);
   const isSuggestion = Boolean(pending.message.card?.teamSetupRequest?.suggestion);
   const durableRequest = isRoutineRequest || isSkillRequest || isProfileRequest || isTeamSetup;
   const canRememberCommand = ownerOrAdmin === true && !durableRequest && !pending.allowKey && Boolean(pending.commandAllowlist);

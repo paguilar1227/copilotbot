@@ -579,6 +579,7 @@ export interface OptionCardData {
   /** A durable default-model proposal (propose_model). */
   modelRequest?: ModelRequestCardData;
   teamSetupRequest?: TeamSetupRequest;
+  templateImportRequest?: import("./bot-template.ts").TemplateImportRequest;
   /** A durable learned-skill proposal. */
   skillRequest?: SkillRequestCardData;
   /** A provider's structured question set. */

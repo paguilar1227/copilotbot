@@ -18,67 +18,98 @@ struct NewCopilotBotView: View {
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
     @State private var importing = false
-    @State private var preview: BotTemplatePreview?
-    @State private var filename = ""
+    @State private var entries: [BotTemplateBatchEntry] = []
+    @State private var imported: Set<String> = []
+    @State private var failures: [String: String] = [:]
+    @State private var fileErrors: [String] = []
     @State private var activateRoutines = false
     @State private var busy = false
     @State private var error: String?
+    private var ready: [BotTemplateBatchEntry] { entries.filter { $0.preview != nil && !imported.contains($0.id) } }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Button("Create a new bot", systemImage: "plus.bubble") { Task { await create() } }
-                    Button("Import YAML from file", systemImage: "square.and.arrow.down") { importing = true }
-                }
-                if let preview {
-                    Section("Review import") {
-                        LabeledContent("File", value: filename)
-                        LabeledContent("Bot", value: preview.name)
-                        Text("Imports reusable settings, routines and resource selections. Credentials stay on your computer. Review permissions and any enabled schedules before creating this bot.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        LabeledContent("Permissions", value: preview.defaults.object["profile"]?.object["approvalMode"]?.string ?? "Workspace default")
-                        DisclosureGroup("All imported settings") {
-                            Text(String(data: (try? JSONEncoder().encode(preview.defaults)) ?? Data(), encoding: .utf8) ?? "")
-                                .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    Button("Create a new bot", systemImage: "plus.bubble") {
+                        Task {
+                            if let bot = await session.createCopilotBot(template: nil) { dismiss(); created(bot) }
+                            else { error = session.actionError }
                         }
-                        ForEach(preview.warnings, id: \.self) { Text($0).foregroundStyle(.orange) }
+                    }
+                    Button("Import YAML files", systemImage: "square.and.arrow.down") { importing = true }
+                }
+                if !entries.isEmpty {
+                    Section("Review imports") {
+                        Text("\(imported.count) imported · \(ready.count) ready · \(entries.filter { $0.preview == nil }.count) invalid")
+                        Text("Review the settings for each bot. Invalid templates are skipped. Credentials stay on your computer.").font(.footnote).foregroundStyle(.secondary)
+                        ForEach(entries) { entry in
+                            if let preview = entry.preview {
+                                DisclosureGroup("\(preview.name)\(imported.contains(entry.id) ? " · Imported" : "")") {
+                                    Text("\(entry.filename) · document \(entry.document)").font(.caption)
+                                    LabeledContent("Permissions", value: preview.defaults.object["profile"]?.object["approvalMode"]?.string ?? "Ask")
+                                    Text(String(data: (try? JSONEncoder().encode(preview.defaults)) ?? Data(), encoding: .utf8) ?? "")
+                                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                                    ForEach(preview.warnings, id: \.self) { Text($0).foregroundStyle(.orange) }
+                                    if let failure = failures[entry.id] { Text(failure).foregroundStyle(.red) }
+                                }
+                            } else {
+                                VStack(alignment: .leading) {
+                                    Text("\(entry.filename) · document \(entry.document) · Invalid").bold()
+                                    ForEach(Array(entry.diagnostics.enumerated()), id: \.offset) { _, issue in Text(issue.description) }
+                                }.foregroundStyle(.red)
+                            }
+                        }
                         Toggle("Enable imported schedules", isOn: $activateRoutines)
-                        Text("Schedules start paused unless you turn this on. You can enable them later in Routines.").font(.footnote).foregroundStyle(.secondary)
-                        Button("Create imported bot") { Task { await create(preview.choosingRoutines(enabled: activateRoutines)) } }
-                            .accessibilityIdentifier("create-imported-bot")
+                        Text("Schedules start paused unless you turn this on.").font(.footnote).foregroundStyle(.secondary)
+                        Button("Create \(ready.count) reviewed bots") { Task { await createImports() } }
+                            .disabled(ready.isEmpty).accessibilityIdentifier("create-imported-bot")
                     }
                 }
+                ForEach(fileErrors, id: \.self) { Text($0).foregroundStyle(.red) }
                 if let error { Text(error).foregroundStyle(.red) }
                 if busy { ProgressView() }
             }
             .disabled(busy)
             .navigationTitle("New bot")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.yaml, .plainText, .data]) { result in
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(imported.isEmpty ? "Cancel" : "Done") { dismiss() }.disabled(busy) } }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.yaml, .plainText, .data], allowsMultipleSelection: true) { result in
                 Task {
+                    busy = true; defer { busy = false }
                     do {
-                        let url = try result.get()
-                        let access = url.startAccessingSecurityScopedResource()
-                        defer { if access { url.stopAccessingSecurityScopedResource() } }
-                        // Same byte contract as the server's YAML parser.
-                        let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
-                        guard bytes.count <= 900_000, let text = String(data: bytes, encoding: .utf8) else { throw APIError.transport("Choose a UTF-8 YAML template no larger than 900 KB.") }
+                        let urls = try result.get()
                         guard let client = session.client else { throw APIError.transport("This computer is offline.") }
-                        let id = session.connection?.id
-                        busy = true; defer { busy = false }
-                        let parsed = try await client.previewTemplate(text)
-                        guard session.connection?.id == id else { return }
-                        preview = parsed; filename = url.lastPathComponent; error = nil
+                        let connectionID = session.connection?.id
+                        var parsed: [BotTemplateBatchEntry] = []
+                        var errors: [String] = []
+                        for (index, url) in urls.enumerated() {
+                            let access = url.startAccessingSecurityScopedResource()
+                            defer { if access { url.stopAccessingSecurityScopedResource() } }
+                            do {
+                                let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
+                                guard bytes.count <= 900_000, let text = String(data: bytes, encoding: .utf8) else { throw APIError.transport("Choose UTF-8 YAML no larger than 900 KB.") }
+                                let batch = try await client.previewTemplates(filename: url.lastPathComponent, yaml: text)
+                                parsed += batch.templates.map { entry in var copy = entry; copy.id = "\(index):\(entry.document)"; return copy }
+                            } catch { errors.append("\(url.lastPathComponent): \(error.localizedDescription)") }
+                        }
+                        guard session.connection?.id == connectionID else { return }
+                        entries = parsed; imported = []; failures = [:]; fileErrors = errors; error = nil
                     } catch { self.error = error.localizedDescription }
                 }
             }
         }
     }
-    private func create(_ template: BotTemplatePreview? = nil) async {
+    private func createImports() async {
         busy = true; defer { busy = false }
-        if let bot = await session.createCopilotBot(template: template) { dismiss(); created(bot) }
-        else { error = session.actionError }
+        let connectionID = session.connection?.id
+        for entry in ready {
+            guard session.connection?.id == connectionID else { error = "Connection changed. Review remaining imports."; return }
+            if let template = entry.preview, let bot = await session.createCopilotBot(template: template.choosingRoutines(enabled: activateRoutines)) {
+                imported.insert(entry.id); failures[entry.id] = nil; created(bot)
+            } else {
+                failures[entry.id] = session.actionError ?? "Could not create this bot."
+            }
+        }
     }
 }
 

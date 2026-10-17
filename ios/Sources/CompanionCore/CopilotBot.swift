@@ -82,6 +82,26 @@ public struct BotTemplatePreview: Decodable, Sendable {
         return .object(["template": defaults, "useDefaults": .bool(false)])
     }
 }
+public struct TemplateDiagnostic: Decodable, Sendable {
+    public var path: String
+    public var message: String
+    public var line: Int?
+    public var column: Int?
+    public var description: String { "\(path)\(line.map { " (line \($0))" } ?? ""): \(message)" }
+}
+public struct BotTemplateBatchEntry: Decodable, Sendable, Identifiable {
+    public var id: String
+    public var filename: String
+    public var document: Int
+    public var defaults: PortableJSON?
+    public var warnings: [String]
+    public var diagnostics: [TemplateDiagnostic]
+    public var preview: BotTemplatePreview? {
+        guard let defaults else { return nil }
+        return BotTemplatePreview(defaults: defaults, warnings: warnings)
+    }
+}
+public struct BotTemplateBatch: Decodable, Sendable { public var templates: [BotTemplateBatchEntry] }
 public struct BotTemplateFile: Codable, Sendable { public var filename: String; public var yaml: String }
 public struct LearningView: Decodable, Sendable {
     public var candidates: [LearningCandidate]
@@ -132,6 +152,9 @@ extension CompanionClient {
     }
     public func previewTemplate(_ yaml: String) async throws -> BotTemplatePreview {
         try await send(makeRequest("POST", "/api/copilotbot/bot-template", body: ["yaml": yaml]), as: BotTemplatePreview.self)
+    }
+    public func previewTemplates(filename: String, yaml: String) async throws -> BotTemplateBatch {
+        try await send(makeRequest("POST", "/api/copilotbot/bot-templates", body: ["files": [["filename": filename, "yaml": yaml]]]), as: BotTemplateBatch.self)
     }
     public func createFromTemplate(_ preview: BotTemplatePreview) async throws -> Bot {
         try await send(makeRequest("POST", "/api/bots", encodedBody: preview.creationBody), as: CreatedBot.self).bot

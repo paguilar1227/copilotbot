@@ -109,6 +109,7 @@ export interface OptionCardData extends Pick<WireOptionCard, "fixedOptions"> {
   profileRequest?: ProfileRequestCardData;
   modelRequest?: ModelRequestCardData;
   teamSetupRequest?: import("../../shared/team-setup").TeamSetupRequest;
+  templateImportRequest?: import("../../shared/bot-template").TemplateImportRequest;
   questionRequest?: QuestionRequestCardData;
 }
 

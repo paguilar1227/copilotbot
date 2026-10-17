@@ -50,7 +50,7 @@ final class CopilotBotUITests: XCTestCase {
         app.buttons["Create"].tap()
         app.buttons["New bot"].tap()
         XCTAssertTrue(app.buttons["Create a new bot"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Import YAML from file"].exists)
+        XCTAssertTrue(app.buttons["Import YAML files"].exists)
         record("New bot or YAML import", app)
     }
 

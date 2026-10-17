@@ -19,6 +19,11 @@ describe("liveCardKind", () => {
     expect(liveDecisionRefusal(card({ requestId: "r1", tool: "update_model", modelRequest: {} as OptionCardData["modelRequest"] })))
       .toBe("This request is reviewed on screen.");
   });
+  it("requires screen review for a template import, including during live calls", () => {
+    const request = card({ requestId: "import", tool: "import_bot_templates", templateImportRequest: {} as OptionCardData["templateImportRequest"] });
+    expect(liveCardKind(request)).toBe("review");
+    expect(liveDecisionRefusal(request)).toBe("This request is reviewed on screen.");
+  });
   it("sends a quota-switch offer to the screen, though it looks like a question", () => {
     // A spoken answer to a question becomes a message to the bot once its
     // asker is gone; an engine's name must never be sent that way.
