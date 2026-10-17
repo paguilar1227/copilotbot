@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { copilotSupport } from './copilot.ts';
 import { DeviceAuthController } from '../drivers/device-auth.ts';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { SendTurnInput } from '../contracts.ts';
@@ -39,6 +39,24 @@ describe('native Copilot', () => {
     const env = { GH_TOKEN: 'foreign', GITHUB_TOKEN: 'foreign', COPILOT_GITHUB_TOKEN: 'foreign' };
     copilotSupport().transformEnv!(env, { cli: 'copilot', fullAuto: false }, 'copilot', {});
     expect(env).toEqual({});
+  });
+  it('connects turn-scoped tools through a private native config for Copilot 1.0.98', () => {
+    const support = copilotSupport();
+    const turn = { threadId: 'native-mcp-test', integrations: { custom: {
+      notes: { command: 'node', args: ['notes.mjs'], env: { TEST_TOKEN: 'private-test-token' } },
+      blocked: { command: 'node', args: ['blocked.mjs'], env: {} },
+    } }, toolScope: { allow: ['native:*', 'mcp:notes:*'] } } as unknown as SendTurnInput;
+    const args = support.spawnArgs({ cli: 'copilot', fullAuto: false }, turn);
+    expect(args).toContain('--additional-mcp-config');
+    expect(args.join(' ')).not.toContain('private-test-token');
+    const path = args[args.indexOf('--additional-mcp-config') + 1]!.slice(1);
+    const data = JSON.parse(readFileSync(path, 'utf8'));
+    expect(Object.keys(data.mcpServers)).toEqual(['notes']);
+    expect(data.mcpServers.notes).toMatchObject({ type: 'local', tools: ['*'] });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(support.restartOnMcpChange).toBe(true);
+    support.releaseMcpFiles();
+    expect(existsSync(path)).toBe(false);
   });
   it('runs device-code sign-in, exposes only the code, and confirms the resulting account', async () => {
     const cli = join(homedir(), 'fake-copilot-login.mjs');

@@ -28,7 +28,8 @@ actual skill use; the owner's verification is part of the evidence.
 Only real, owner-verified comparisons with a passing candidate and a measurable
 baseline failure allow validation. A pinned successful trial matching the
 validated context is then required for activation. Rollback restores the prior
-package and enabled state; a newly created skill becomes disabled. An intervening
+package and enabled state; a newly created skill is removed from the active workspace,
+with its full candidate preserved in learning history. An intervening
 edit prevents overwriting it. Rejected and superseded candidates remain in history.
 Learning records are local, owner-readable, and excluded from sharing payloads.
 

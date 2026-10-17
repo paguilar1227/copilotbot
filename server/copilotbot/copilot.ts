@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { turnStdioMcpServers } from '../drivers/turn-mcp.ts';
 import { execCli, spawnCli, killCliTree } from '../procs.ts';
 import { createAcpDriver, type AcpConfig, type AcpSupport } from '../drivers/acp/core.ts';
 import type { EffortLevel, ModelCatalog, ProviderDriver, ProviderSnapshot, SendTurnInput } from '../contracts.ts';
@@ -12,11 +17,12 @@ const signIn: DeviceSignIn = {
 };
 const models: ModelCatalog = { default: 'agent-default', options: [{ id: 'agent-default', label: 'Copilot CLI default' }] };
 
-export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepare(turn: SendTurnInput): Promise<SendTurnInput> } {
+export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepare(turn: SendTurnInput): Promise<SendTurnInput>; releaseMcpFiles(): void } {
   let catalog: CopilotCatalog | undefined;
   let pending: ReturnType<typeof discoverCopilot> | undefined;
   let environment: Record<string, string | undefined> = {};
   let command = 'copilot';
+  let mcpDirectory: string | undefined;
   let lastResult: Awaited<ReturnType<typeof discoverCopilot>> | undefined;
   const load = (env: Record<string, string | undefined>, cli: string, refresh = false) => {
     environment = env;
@@ -40,7 +46,22 @@ export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepa
     driverKind: 'copilotAgent', displayName: 'GitHub Copilot', access: 'subscription',
     defaultCli: 'copilot', nativeSource: 'copilot.acp', models,
     effortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], modelVariants: false,
-    spawnArgs: () => ['--acp'], pickAuthMethod: () => null, authFailure: 'continue',
+    // Copilot 1.0.98 rejects ACP stdio MCP entries; its native config connects the same scoped servers.
+    spawnArgs: (_config, turn) => {
+      const servers = turnStdioMcpServers(turn);
+      mcpDirectory ??= mkdtempSync(join(tmpdir(), 'copilotbot-mcp-'));
+      const path = join(mcpDirectory, `${createHash('sha256').update(turn.threadId).digest('hex')}.json`);
+      writeFileSync(path, JSON.stringify({ mcpServers: Object.fromEntries(servers.map(server => [server.name, {
+        type: 'local', command: server.command, args: server.args, env: server.env, tools: ['*'],
+      }])) }), { mode: 0o600 });
+      return ['--acp', '--additional-mcp-config', `@${path}`];
+    },
+    restartOnMcpChange: true,
+    releaseMcpFiles() {
+      if (mcpDirectory) rmSync(mcpDirectory, { recursive: true, force: true });
+      mcpDirectory = undefined;
+    },
+    pickAuthMethod: () => null, authFailure: 'continue',
     transformEnv: env => { delete env.COPILOT_GITHUB_TOKEN; delete env.GH_TOKEN; delete env.GITHUB_TOKEN; },
     loginNote: 'Choose Set up Copilot in Settings → Engines to sign in to GitHub.',
     deviceSignIn: { ...signIn, signedIn: async env => { try { await load(env, command, true); return true; } catch { return false; } } },
@@ -87,7 +108,13 @@ export const CopilotDriver: ProviderDriver<AcpConfig> = {
   ...base,
   async create(input) {
     const instanceSupport = copilotSupport();
-    const instance = await createAcpDriver(instanceSupport).create(input);
+    let instance;
+    try { instance = await createAcpDriver(instanceSupport).create(input); }
+    catch (error) { instanceSupport.releaseMcpFiles(); throw error; }
+    const dispose = instance.dispose;
+    instance.dispose = async () => {
+      try { await dispose(); } finally { instanceSupport.releaseMcpFiles(); }
+    };
     const send = instance.adapter.sendTurn;
     instance.adapter.sendTurn = async turn => send(await instanceSupport.prepare(turn));
     return instance;

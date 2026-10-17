@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { configureLearningAccess, LearningStore, packageVersion, type LearningSkill } from "./learning.ts";
 import { createLearningHost } from "./learning-host.ts";
 import { Store } from "../store.ts";
-import { applyStagedSkillWrite, listSkills, readSkillFile, readSkillReferences, stageSkillWrite, setSkillEnabled } from "../skills.ts";
+import { workspaceDir } from "../workspace.ts";
+import { applyStagedSkillWrite, removeSkill, listSkills, readSkillFile, readSkillReferences, stageSkillWrite, setSkillEnabled } from "../skills.ts";
 import type { LearningCandidate } from "../../shared/learning.ts";
 
 const md = (text: string) => `---\nname: weekly-report\ndescription: Writes a weekly report.\n---\n\n# Report\n${text}\n`;
@@ -122,24 +123,30 @@ describe("learning proof gates (synthetic events test orchestration, not model q
   });
 });
 
-it("integrates the real revision store: preserves references and restores enabled state on rollback", () => {
+it.each([
+  { hasPrevious: true, tamper: "none" }, { hasPrevious: false, tamper: "none" },
+  { hasPrevious: false, tamper: "owner-file" }, { hasPrevious: false, tamper: "replacement" },
+])("restores or preserves the real workspace on rollback: %j", ({ hasPrevious, tamper }) => {
   const store = new Store(() => ({ instanceId: "test", model: "test" }));
   const bot = store.createBot({ name: "Learning fixture" });
-  const staged = stageSkillWrite(bot.id, { action: "create", files: files("old"), source: "learn:fixture" });
-  if ("error" in staged) throw new Error(staged.error);
-  const installed = applyStagedSkillWrite(bot.id, staged.id, { expectedSha256: staged.sha256, expectedReferencesSha256: staged.referencesSha256 ?? null });
-  expect(installed).not.toHaveProperty("error"); setSkillEnabled(bot.id, "weekly-report", false);
+  if (hasPrevious) {
+    const staged = stageSkillWrite(bot.id, { action: "create", files: files("old"), source: "learn:fixture" });
+    if ("error" in staged) throw new Error(staged.error);
+    const installed = applyStagedSkillWrite(bot.id, staged.id, { expectedSha256: staged.sha256, expectedReferencesSha256: staged.referencesSha256 ?? null });
+    expect(installed).not.toHaveProperty("error"); setSkillEnabled(bot.id, "weekly-report", false);
+  }
   store.appendMessage(bot.threadId, { role: "user", kind: "text", text: "/learn correct the report" });
   store.appendMessage(bot.threadId, { role: "bot", kind: "text", text: "A verified result", turnId: "previous" });
   const host = createLearningHost(store);
   host.learning.prepare(bot.id, bot.threadId, { text: "/learn correct the report", context: {}, runtime: "fixture" });
-  const c = host.propose(bot.id, bot.threadId, { targetName: "weekly-report", files: [{ path: "SKILL.md", content: md("new") }], source: "conversation", gist: "new", author: "explicit_learning" });
-  expect(c.files).toEqual(files("new"));
-  expect(readSkillFile(bot.id, c.name)).toBe(md("old"));
-  expect(listSkills(bot.id).find(s => s.name === c.name)?.enabled).toBe(false);
+  const nextFiles = tamper === "owner-file" ? [{ path: "SKILL.md", content: md("new") }] : files("new");
+  const c = host.propose(bot.id, bot.threadId, { ...(hasPrevious ? { targetName: "weekly-report" } : {}), files: hasPrevious ? [{ path: "SKILL.md", content: md("new") }] : nextFiles, source: "conversation", gist: "new", author: "explicit_learning" });
+  expect(c.files).toEqual(nextFiles);
+  expect(readSkillFile(bot.id, c.name)).toBe(hasPrevious ? md("old") : null);
+  expect(listSkills(bot.id).find(s => s.name === c.name)?.enabled).toBe(hasPrevious ? false : undefined);
   expect(c.evidence.map(e => e.kind)).toEqual(["user_instruction", "task_outcome"]);
   expect(host.explicit(bot.threadId)).toBe(true);
-  expect(readSkillReferences(bot.id, c.name)).toEqual(files("old").slice(1));
+  expect(readSkillReferences(bot.id, c.name)).toEqual(hasPrevious ? files("old").slice(1) : null);
   const revision = () => host.learning.view(bot.id).candidates.find(candidate => candidate.id === c.id)!;
   const contracts = (["motivating", "variation"] as const).map(kind => host.learning.addCase(bot.id, c.id, revision().revision, {
     title: kind, kind, prompt: `${kind} report`, workspace: tmpdir(), environment: "Reset fixture notes", checks: [{ kind: "output_includes", value: "correct" }],
@@ -162,11 +169,28 @@ it("integrates the real revision store: preserves references and restores enable
   host.learning.change(bot.id, c.id, revision().revision, "promote");
   expect(readSkillFile(bot.id, c.name)).toBe(md("new"));
   expect(listSkills(bot.id).find(s => s.name === c.name)?.enabled).toBe(true);
+  if (tamper !== "none") {
+    const ownerFile = join(workspaceDir(bot.id), "skills", c.name, "owner-notes.txt");
+    if (tamper === "owner-file") writeFileSync(ownerFile, "Keep my notes.");
+    else {
+      expect(removeSkill(bot.id, c.name)).toEqual({ removed: true });
+      const replacement = stageSkillWrite(bot.id, { action: "create", files: nextFiles, source: "learn:owner replacement" });
+      if ("error" in replacement) throw new Error(replacement.error);
+      expect(applyStagedSkillWrite(bot.id, replacement.id)).not.toHaveProperty("error");
+    }
+    expect(() => host.learning.change(bot.id, c.id, revision().revision, "rollback")).toThrow(/changed after activation/);
+    expect(readSkillFile(bot.id, c.name)).toBe(md("new"));
+    if (tamper === "owner-file") expect(readFileSync(ownerFile, "utf8")).toBe("Keep my notes.");
+    else expect(listSkills(bot.id).find(skill => skill.name === c.name)?.source).toBe("learn:owner replacement");
+    expect(revision().phase).toBe("active");
+    return;
+  }
   host.learning.change(bot.id, c.id, revision().revision, "rollback");
-  expect(readSkillFile(bot.id, c.name)).toBe(md("old"));
-  expect(readSkillReferences(bot.id, c.name)).toEqual(files("old").slice(1));
-  expect(listSkills(bot.id).find(s => s.name === c.name)?.enabled).toBe(false);
-  expect(listSkills(bot.id).find(s => s.name === c.name)?.source).toBe("learn:fixture");
+  expect(readSkillFile(bot.id, c.name)).toBe(hasPrevious ? md("old") : null);
+  expect(readSkillReferences(bot.id, c.name)).toEqual(hasPrevious ? files("old").slice(1) : null);
+  expect(listSkills(bot.id).find(s => s.name === c.name)?.enabled).toBe(hasPrevious ? false : undefined);
+  expect(listSkills(bot.id).find(s => s.name === c.name)?.source).toBe(hasPrevious ? "learn:fixture" : undefined);
+  expect(revision().files).toEqual(nextFiles);
 
   expect(() => host.propose(bot.id, "someone-elses-thread", { files: files("new"), source: "conversation", gist: "x", author: "background_review" })).toThrow(/private/);
 });

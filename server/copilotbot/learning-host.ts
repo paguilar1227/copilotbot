@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { LearningCandidate, LearningEvidence } from "../../shared/learning.ts";
 import { DATA_DIR } from "../config.ts";
-import { listSkills, readSkillFile, readSkillReferences, stageSkillWrite, applyStagedSkillWrite, rejectStagedSkillWrite, setSkillEnabled } from "../skills.ts";
+import { listSkills, readSkillFile, readSkillReferences, stageSkillWrite, applyStagedSkillWrite, rejectStagedSkillWrite, undoSkillWrite, setSkillEnabled } from "../skills.ts";
 import type { Store } from "../store.ts";
 import { parseLearnCommand, parseSaveRunRequest } from "../skill-learn.ts";
 import { parseSkillMd } from "../skills.ts";
@@ -36,8 +36,17 @@ export function createLearningHost(store: Store) {
     rollback: (botId, c) => {
       const current = skills(botId).find(s => s.name === c.name);
       if (!current || packageVersion(current.files) !== c.version) throw new LearningError("This skill changed after activation. Rollback would overwrite another edit.");
-      if (c.baseVersion) install(botId, c, true);
-      const enabled = setSkillEnabled(botId, c.name, c.baseVersion ? c.baseEnabled : false);
+      const undone = undoSkillWrite(botId, {
+        stagedId: c.appliedStageId ?? "", name: c.name, action: c.baseVersion ? "update" : "create",
+        ...(c.baseVersion ? { previous: {
+          skillMd: c.baseFiles.find(file => file.path === "SKILL.md")!.content,
+          source: c.baseSource!, references: c.baseFiles.filter(file => file.path !== "SKILL.md"),
+        } } : {}),
+      });
+      if ("stale" in undone) throw new LearningError("This skill changed after activation. Rollback would overwrite another edit.");
+      if ("error" in undone) throw new LearningError(undone.error);
+      if (!c.baseVersion) return;
+      const enabled = setSkillEnabled(botId, c.name, c.baseEnabled);
       if ("error" in enabled) throw new LearningError(enabled.error);
     },
   });
