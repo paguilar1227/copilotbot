@@ -20,7 +20,7 @@ The model catalog comes from ACP. Models and reasoning effort use separate contr
 
 ### Bot templates and resources
 
-New bot → **Import YAML file** loads a reviewable draft. Nothing runs until **Create bot**. Bot settings → **Identity → Export YAML template** saves version 1 of `copilotbot/bot`, including model/effort, persona, permission preferences, voice, routines and resource selections. Credentials, grants, conversation history, learned memory, attached files and avatar images are excluded. Review free-text instructions before sharing them.
+New bot → **Import YAML file** loads a reviewable draft. Nothing runs until **Create bot**. Bot settings → **Identity → Export YAML template** saves version 1 of `copilotbot/bot`, including model/effort, persona, permission preferences, voice, routines, resource selections and avatar appearance. Custom avatar images travel inside the template. Credentials, grants, conversation history, learned memory and other attached files are excluded. Review free-text instructions and the avatar before sharing them.
 
 **Skills & MCPs** appears in bot settings and team settings. Choose all available resources, selected names, or none. Team choices limit every member, including future members; individual choices can narrow them further. Changes wait until affected bots are idle. A selected skill must also be installed, assigned and enabled. Imported templates report missing or disabled resources; they never install servers or transfer sign-ins. Skill references use the local shared library; private skills must be added to the new bot separately.
 
