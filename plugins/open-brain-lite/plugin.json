@@ -1,0 +1,29 @@
+{
+  "format": "copilotbot.plugin",
+  "apiVersion": 1,
+  "id": "open-brain-lite",
+  "name": "Open Brain Lite",
+  "version": "1.0.0",
+  "description": "Durable project memory, notes, tasks, and search across your bot sessions.",
+  "backend": "backend.mjs",
+  "pages": [{ "id": "workspace", "title": "Workspace", "entry": "ui/index.html" }],
+  "commands": [
+    { "id": "status", "title": "Check connection" },
+    { "id": "projects", "title": "List projects" },
+    { "id": "create-project", "title": "Create project" },
+    { "id": "context", "title": "Read project memory" },
+    { "id": "notes", "title": "List notes" },
+    { "id": "capture-note", "title": "Capture note" },
+    { "id": "create-todo", "title": "Create task" },
+    { "id": "save-session", "title": "Save session handoff" },
+    { "id": "search", "title": "Search project knowledge" },
+    { "id": "consolidate", "title": "Consolidate project memory" }
+  ],
+  "settings": {
+    "endpoint": { "type": "url", "label": "Open Brain Lite address", "default": "http://127.0.0.1:3210", "required": true, "description": "Address reachable from the computer running CopilotBot. Start your existing Open Brain Lite installation first." },
+    "apiToken": { "type": "secret", "label": "API token (optional)", "description": "Local Open Brain Lite needs no token. Use this only for a server configured to require one. Clear the field to remove a saved token." }
+  },
+  "services": { "brain": { "urlSetting": "endpoint", "tokenSetting": "apiToken" } },
+  "mcp": [{ "name": "plugin_open_brain_lite", "service": "brain", "path": "/mcp" }],
+  "skills": [{ "name": "open-brain-lite", "file": "skills/open-brain-lite/SKILL.md", "description": "Keep project memory across sessions using Open Brain Lite." }]
+}

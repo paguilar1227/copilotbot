@@ -23,6 +23,7 @@ const yamlEsmPlugin = {
 // Every file run as its own process.
 const ENTRY_POINTS = [
   "index.ts",
+  "plugins/worker.ts",
   "message-search.worker.ts",
   // the `openmausbot` command
   "openmausbot.ts",

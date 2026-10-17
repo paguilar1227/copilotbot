@@ -23,6 +23,7 @@ import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schem
 import { deciderConfigSchema, type DeciderConfig } from "./decider/config.ts";
 import { browserEngineConfigSchema, isValidCdpTarget, type BrowserEngineConfig } from "./browser/config.ts";
 import { roomContextSettings } from "./room-context-settings.ts";
+import { allMcpServers } from './plugins/contributions.ts';
 
 const optionalText = z.string().optional();
 const SSH_ALIAS = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
@@ -1458,7 +1459,7 @@ function skipMcpEntry(name: string, why: string): void {
 
 export function customMcpServers(cfg: AppConfig, only?: string[]): Record<string, CustomMcpServer> {
   const out: Record<string, CustomMcpServer> = {};
-  for (const [name, raw] of Object.entries(cfg.mcpServers ?? {})) {
+  for (const [name, raw] of Object.entries(allMcpServers(cfg.mcpServers))) {
     if (only && !only.includes(name)) continue;
     const parsed = parseStoredMcpServer(name, raw);
     if (!parsed.ok) {

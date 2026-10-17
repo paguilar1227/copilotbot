@@ -7,7 +7,7 @@ import { DATA_DIR, type AppConfig } from "../config.ts";
 import { appendDecision } from "../decision-log.ts";
 import { UNDO_STALE, type DirectApply } from "../direct-apply.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { readLibrarySkillFile, readSkillLibraryIndex, skillsLibraryEnabled } from "../skill-library.ts";
+import { availableLibrarySkills, availableSkillAssignments, readLibrarySkillFile, readSkillLibraryIndex, skillsLibraryEnabled } from "../skill-library.ts";
 import {
   conversationAssignedSkills,
   prepareShareNote,
@@ -63,11 +63,11 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
   const mode = () => shareLearnedSkillsMode(cfg);
 
   const listBotSkills = (bot: BotRecord) =>
-    (skillsLibraryEnabled(cfg) ? resolveBotSkills(bot.id, bot.assignedSkills) : listSkills(bot.id)).filter(skill => skillAllowed(bot.id, skill.name));
+    resolveBotSkills(bot.id, availableSkillAssignments(cfg, bot.assignedSkills), availableLibrarySkills(cfg)).filter(skill => skillAllowed(bot.id, skill.name));
   const readBotSkillFile = (bot: BotRecord, name: string): string | null => {
     if (!skillAllowed(bot.id, name)) return null;
     const own = readSkillFile(bot.id, name);
-    if (own !== null || !skillsLibraryEnabled(cfg)) return own;
+    if (own !== null || !availableLibrarySkills(cfg).some(skill => skill.name === name)) return own;
     // Private wins collisions: a private skill that no longer verifies must not fall through to a same-named library skill.
     if (listSkills(bot.id).some((skill) => skill.name === name)) return null;
     // The library fallback is by assignment only, never by name alone.
@@ -188,8 +188,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     conversationStartedAt,
 
     conversationSkills(bot: BotRecord, threadId: string): string[] | undefined {
-      if (!skillsLibraryEnabled(cfg)) return undefined;
-      return conversationAssignedSkills(bot.id, liveAssigned(bot), conversationStartedAt(threadId));
+      return conversationAssignedSkills(bot.id, availableSkillAssignments(cfg, liveAssigned(bot)), conversationStartedAt(threadId));
     },
 
     shareNote(bot: BotRecord, threadId: string, enabled: boolean): TurnShareNote {

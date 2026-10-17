@@ -1,4 +1,8 @@
 import { modelEffortLevels } from "../shared/model-effort.ts";
+import { fileURLToPath } from 'node:url';
+import { discoverPlugins, PluginHost } from './plugins/host.ts';
+import { pluginRoutes } from './plugins/routes.ts';
+import { allMcpServers, pluginSkills } from './plugins/contributions.ts';
 // Import first: it reads a Cloud home's secrets off the launcher's pipe before any module can start a process.
 import { BOOT_CLOUD_SECRETS } from "./cloud-secrets-boot.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -496,6 +500,7 @@ import {
   renderSkillInstructions,
   selectBundledSkills,
   skillsLibraryEnabled,
+  availableSkillAssignments,
 } from "./skill-library.ts";
 import { runSkillsLibraryBootSweep } from "./skills-library-migration.ts";
 import { installedPlaybookInstructions } from "./installed-playbooks.ts";
@@ -3339,7 +3344,7 @@ function previewSystemPrompt(bot: BotRecord) {
     { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (agentsMounted ? TEAM_MEMORY_PROMPT : "") },
     teamAvailabilityPart(agentsMounted && coordination ? peers : []),
     { id: "memory", label: "Memory", text: memorySystemPrompt(bot.id, { managedWrites: agentsMounted, fileTools: Boolean(privateWorkspace), enabled: bot.memoryEnabled !== false }) },
-    { id: "skills", label: "Skills index", text: privateWorkspace ? skillsSystemPrompt(bot.id, skillsLibraryEnabled(cfg) ? bot.assignedSkills : undefined) : "" },
+    { id: "skills", label: "Skills index", text: privateWorkspace ? skillsSystemPrompt(bot.id, availableSkillAssignments(cfg, bot.assignedSkills)) : "" },
   ], agentsMounted ? { env: agentsToolBridgeEnv(cfg, bot, instance && turnEngine(instance, providerConfigs(), registry.lastSnapshot(instance.instanceId), bot.cwd ?? undefined)) } : undefined, { replyStyle: bot.replyStyle });
   const totalBytes = built.sections.reduce((n, s) => n + s.bytes, 0);
   return {
@@ -8611,7 +8616,7 @@ async function startTurn(
       const plannedConfig = sessionConfig(bot.soul);
       const skillAuthoring = skillAuthoringEnabled(cfg) && agentsMounted && !learning.pinned(bot.id, threadId);
       const skillCommandText = supportsWorkspaceFiles(instance.driverKind)
-        ? expandSkillCommandTurnText(bot.id, providerText, skillsLibraryEnabled(cfg) ? (store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined)
+        ? expandSkillCommandTurnText(bot.id, providerText, availableSkillAssignments(cfg, store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills))
         : providerText;
       const setupText = agentsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
       const userTurnText = promptWithReply(
@@ -13256,6 +13261,7 @@ function configStatus() {
       skillReview: cfg.features?.skillReview === true,
       skillReviewSteps: skillReviewSteps(cfg),
       skillsLibrary: skillsLibraryEnabled(cfg),
+      pluginSkills: pluginSkills().length > 0,
       shareLearnedSkills: skillsHost.mode(),
       showToolCalls: showToolCallsEnabled(cfg),
       routinesInConversation: routinesInConversationEnabled(cfg),
@@ -13299,7 +13305,7 @@ function configForAccess(status: ReturnType<typeof configStatus>, admin: boolean
 
 function mcpServerResponse() {
   const policy = managedPolicy.current();
-  const servers = listMcpServers(cfg.mcpServers).map((server) => {
+  const servers = listMcpServers(allMcpServers(cfg.mcpServers)).map((server) => {
     if (!("url" in server)) return server;
     const auth = mcpOAuth.authState(server.name, server.url);
     const listed = server.oauth ? { ...server, oauth: { ...server.oauth, redirectUri: mcpOAuthRedirectUri(server.url) } } : server;
@@ -13626,6 +13632,11 @@ const cloudMoveRoutes = createCloudMoveRoutes({
 });
 
 // `workspaceAccess` is assigned at boot, after this line: read it per request.
+const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => broadcast({ kind: 'config', ...configStatus() }), new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url));
+const bundledPlugins = process.env.OMB_PLUGINS_DIR || fileURLToPath(new URL('../plugins/', import.meta.url));
+if (CLOUD_HOME || HOSTED_WORKSPACE) appPlugins.error = 'App extensions are available in self-hosted workspaces.';
+else await appPlugins.start(discoverPlugins(bundledPlugins));
+ROUTES.push(pluginRoutes(appPlugins));
 ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && entitled("admin") }));
 const orgInstallStatuses = () => orgLibrary?.installStatuses() ?? new Map();
 ROUTES.push(createBotPresetRoutes({ presets: presetStore, orgStatuses: orgInstallStatuses }));
@@ -17607,6 +17618,7 @@ const gracefulShutdown = createGracefulShutdown({
       await Promise.all([...temporaries, browserSweep.closeAll()]);
       await browserRuntime.closeAll();
     },
+    () => appPlugins.close(),
     () => liveCalls.shutdown(),
     () => flushAllProfileHistory(),
     () => flushAllMemoryJournals(),

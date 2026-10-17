@@ -170,6 +170,7 @@ RUN if [ -n "$ENGINES" ]; then HOME=/tmp/omb-build-home npm install -g $ENGINES 
 COPY --from=build --chown=maus:maus /src/dist-native/duckdb/linux-x64 ./duckdb
 COPY --from=build --chown=maus:maus /src/dist-server ./dist-server
 COPY --from=build --chown=maus:maus /src/dist ./dist
+COPY --from=build --chown=maus:maus /src/plugins ./plugins
 ENV HOME=/data
 VOLUME ["/data"]
 USER maus

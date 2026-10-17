@@ -50,6 +50,8 @@ files:
 asar: true
 
 extraResources:
+  - from: plugins
+    to: plugins
   # Ship the app's own license terms in every desktop distribution.
   - from: LICENSE
     to: licenses/OpenMausBot-LICENSE.txt

@@ -58,6 +58,7 @@ try {
   // A desktop install can live beneath a user's CommonJS package scope.
   writeFileSync(join(staging, "package.json"), '{"type":"commonjs"}\n');
   cpSync(process.env.OMB_SMOKE_DIST ?? join(root, "dist-server"), join(staging, "server"), { recursive: true });
+  cpSync(process.env.OMB_SMOKE_PLUGINS ?? join(root, 'plugins'), join(staging, 'plugins'), { recursive: true });
   if (browserBundle) cpSync(resolve(browserBundle), join(staging, "browser-engine"), { recursive: true });
 } catch (error) {
   for (const directory of [staging, home]) rmSync(directory, { recursive: true, force: true });
@@ -129,6 +130,36 @@ if (listening) {
     const response = await fetch(`http://127.0.0.1:${port}/api/search?q=packaged-worker-probe`, { signal: AbortSignal.timeout(10_000) });
     searchReport = { status: response.status, body: await response.json() };
   } catch (error) { searchReport = { error: String(error) }; }
+}
+
+let pluginReport = null;
+if (listening) {
+  try {
+    const request = async (path, method = 'GET', body) => {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      const value = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(value));
+      return value;
+    };
+    const initial = await request('/api/plugins');
+    assert.equal(initial.plugins.find(plugin => plugin.manifest.id === 'open-brain-lite')?.enabled, false);
+    await request('/api/plugins/install', 'POST', { directory: join(staging, 'plugins', 'examples', 'project-board'), trust: true });
+    await request('/api/plugins/project-board/enable', 'PUT', { enabled: true });
+    let ready;
+    do {
+      ready = (await request('/api/plugins')).plugins.find(plugin => plugin.manifest.id === 'project-board');
+      if (ready.status === 'ready' || ready.status === 'error') break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    } while (Date.now() < deadline);
+    assert.equal(ready.status, 'ready', ready.error);
+    await request('/api/plugins/project-board/commands/add', 'POST', { title: 'Packaged extension receipt' });
+    const read = await request('/api/plugins/project-board/commands/list', 'POST', {});
+    assert.deepEqual(read.result, [{ title: 'Packaged extension receipt' }]);
+    await request('/api/plugins/project-board/enable', 'PUT', { enabled: false });
+    const disabled = await fetch(`http://127.0.0.1:${port}/api/plugins/project-board/commands/list`, { method: 'POST', body: '{}' });
+    assert.equal(disabled.status, 409);
+    pluginReport = { ok: true, installed: initial.plugins.map(plugin => plugin.manifest.id), commands: read.result, disabledStatus: disabled.status };
+  } catch (error) { pluginReport = { error: String(error) }; }
 }
 
 let browserReport = null;
@@ -437,6 +468,10 @@ if (!headlessReport || headlessReport.error || headlessReport.doctor.body?.serve
 }
 
 const count = Object.keys(proxyReport.resolved).length;
+if (!pluginReport?.ok) {
+  console.error('The packaged app extension lifecycle failed:', pluginReport);
+  process.exit(1);
+}
 if (!backupReport?.ok) {
   console.error("the packaged backup worker failed its encrypted export smoke:", backupReport);
   process.exit(1);
@@ -446,6 +481,7 @@ console.log(`all ${count} spawned proxy paths resolve inside the packaged server
 console.log("packaged MCP stdio server reached the API and flushed its final frames ✓");
 console.log("packaged openmausbot doctor and bots answered from the bundle ✓");
 console.log("packaged backup worker exported an encrypted archive ✓");
+console.log('packaged app extensions loaded, executed, stored data, and disabled without node_modules ✓');
 if (launcherReport) console.log("packaged container launcher ran the server as its child and stopped it cleanly ✓");
 if (desktopEntryReport) console.log(`packaged desktop entry started the server twice on its compile cache (${desktopEntryReport.starts[0].cached.length} entries) ✓`);
 if (layerShipped) console.log("packaged server found its enterprise layer inside the server dir ✓");

@@ -9,9 +9,19 @@ import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR, type AppConfig } from "./config.ts";
 import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../shared/skill-md.ts";
 import type { SkillPackageStamp } from "./skills.ts";
+import { pluginSkills } from './plugins/contributions.ts';
 
 export function skillsLibraryEnabled(cfg: AppConfig): boolean {
   return cfg.features?.skillsLibrary === true;
+}
+
+export function availableLibrarySkills(cfg: AppConfig): LibrarySkillListing[] {
+  return listLibrarySkills().filter(skill => skillsLibraryEnabled(cfg) || skill.pluginId !== undefined);
+}
+
+export function availableSkillAssignments(cfg: AppConfig, names: readonly string[] | undefined): string[] {
+  const available = new Set(availableLibrarySkills(cfg).map(skill => skill.name));
+  return (names ?? []).filter(name => available.has(name));
 }
 
 export interface SkillManifest {
@@ -163,6 +173,7 @@ export function libraryDescriptionsAt(startedAt: number | undefined, root: strin
 }
 
 export interface LibrarySkillListing {
+  pluginId?: string;
   name: string;
   description: string;
   enabled: boolean;
@@ -216,6 +227,8 @@ export function librarySkillDirectory(root: string, name: string): string {
 }
 
 export function librarySkillFilePath(name: string, root: string = skillsLibraryRoot()): string {
+  const plugin = root === skillsLibraryRoot() && !readSkillLibraryIndex(root)[name] ? pluginSkills().find(skill => skill.name === name) : undefined;
+  if (plugin) return plugin.file;
   return join(root, "skills", name, "SKILL.md");
 }
 
@@ -286,9 +299,11 @@ function librarySkillListing(root: string, entry: SkillLibraryEntry): LibrarySki
 }
 
 export function listLibrarySkills(root: string = skillsLibraryRoot()): LibrarySkillListing[] {
-  return Object.values(readSkillLibraryIndex(root))
-    .map((entry) => librarySkillListing(root, entry))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const library = Object.values(readSkillLibraryIndex(root)).map(entry => librarySkillListing(root, entry));
+  if (root === skillsLibraryRoot()) for (const skill of pluginSkills()) {
+    if (!library.some(entry => entry.name === skill.name)) library.push({ pluginId: skill.plugin, name: skill.name, description: skill.description, source: `Plugin: ${skill.plugin}`, enabled: skill.enabled, editable: false, sha256: sha256Hex(readFileSync(skill.file, 'utf8')), importedAt: '', tags: [], warnings: [], skippedFiles: [] });
+  }
+  return library.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function installLibrarySkill(input: {
@@ -348,7 +363,10 @@ export function installLibrarySkill(input: {
 export function readLibrarySkillFile(name: string, root: string = skillsLibraryRoot()): string | null {
   if (!isSkillName(name)) return null;
   const entry = readSkillLibraryIndex(root)[name];
-  if (!entry) return null;
+  if (!entry) {
+    const plugin = root === skillsLibraryRoot() ? pluginSkills().find(skill => skill.name === name) : undefined;
+    return plugin ? readFileSync(plugin.file, 'utf8') : null;
+  }
   try {
     const text = readFileSync(join(librarySkillDirectory(root, name), "SKILL.md"), "utf8");
     return sha256Hex(text) === entry.sha256 ? text : null;

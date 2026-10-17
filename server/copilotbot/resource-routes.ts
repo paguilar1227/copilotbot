@@ -3,9 +3,10 @@ import { PASS, type RouteHandler } from '../routes/table.ts';
 import { customMcpServers, type AppConfig } from '../config.ts';
 import type { Store, BotRecord } from '../store.ts';
 import { listSkills, resolveBotSkills, syncSkillLinks } from '../skills.ts';
-import { listLibrarySkills, skillsLibraryEnabled } from '../skill-library.ts';
+import { availableLibrarySkills } from '../skill-library.ts';
 import { resourceAccessSchema, unrestricted, type ResourceAccess, type ResourcePolicies } from './resource-access.ts';
 import { exportBotTemplate, parseBotTemplate } from './bot-templates.ts';
+import { allMcpServers } from '../plugins/contributions.ts';
 
 function widens(previous: ResourceAccess, next: ResourceAccess): boolean {
   return (['skills', 'mcpServers'] as const).some(key => previous[key] !== null && (next[key] === null || next[key].some(name => !previous[key]!.includes(name))));
@@ -20,11 +21,11 @@ export function resourceRoutes(deps: {
   const { store, cfg, policies } = deps;
   const catalog = (bots: BotRecord[]) => {
     const skills = new Map<string, { name: string; enabled: boolean; description: string; origin: "private" | "library" }>();
-    for (const skill of skillsLibraryEnabled(cfg) ? listLibrarySkills() : []) skills.set(skill.name, { ...skill, origin: "library" });
+    for (const skill of availableLibrarySkills(cfg)) skills.set(skill.name, { ...skill, origin: "library" });
     for (const bot of bots) for (const skill of listSkills(bot.id)) skills.set(skill.name, { ...skill, origin: "private" });
     return {
       skills: [...skills.values()].map(({ name, enabled, description, origin }) => ({ name, enabled, description, origin })),
-      mcpServers: Object.keys(cfg.mcpServers ?? {}).map(name => ({ name, enabled: name in customMcpServers(cfg) })),
+      mcpServers: Object.keys(allMcpServers(cfg.mcpServers)).map(name => ({ name, enabled: name in customMcpServers(cfg) })),
     };
   };
   return async ({ req, res, path, method, url, auth, json, readBody }) => {
@@ -64,7 +65,7 @@ export function resourceRoutes(deps: {
         if (!bot && section !== '' && !store.sections.includes(section!)) return json(res, 404, { error: 'No such team' });
         if (members.some(deps.busy)) return json(res, 409, { error: 'Stop the affected bots before changing their resources.' });
         if (bot) {
-          const library = new Set(skillsLibraryEnabled(cfg) ? listLibrarySkills().map(skill => skill.name) : []);
+          const library = new Set(availableLibrarySkills(cfg).map(skill => skill.name));
           const assignedSkills = [...new Set([...(bot.assignedSkills ?? []), ...(policy.skills ?? []).filter(name => library.has(name))])];
           store.patchBot(bot.id, { skillAccess: policy.skills ?? undefined, mcpServers: policy.mcpServers ?? undefined, assignedSkills });
         } else policies.setTeam(section!, policy);

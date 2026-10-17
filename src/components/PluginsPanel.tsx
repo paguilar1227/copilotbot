@@ -29,6 +29,7 @@ import { SidebarPopoverMenu } from "./SidebarPopoverMenu";
 import { CATEGORY_SECTION_SIZE, catalogSections, inCategory, rankCategories } from "@/lib/app-catalog";
 import { McpServersPanel } from "./McpServersPanel";
 import { HighLevelCard } from "./HighLevelCard";
+import { ExtensionsPanel } from '@/copilotbot/plugins/ExtensionsPanel';
 
 export interface ToolkitCard {
   slug: string;
@@ -258,6 +259,7 @@ export function PluginsPanel() {
   const [category, setCategory] = useState<string | null>(null);
   // Appended after the older state so tests that seed state by call order keep their indices.
   const [highLevelConnected, setHighLevelConnected] = useState<boolean | null>(null);
+  const [extensionsOpen, setExtensionsOpen] = useState(false);
 
   const polls = useRef(new Map<string, () => void>());
   const statusGenerations = useRef(new Map<string, number>());
@@ -567,6 +569,7 @@ export function PluginsPanel() {
     ? "bg-ink text-app"
     : "bg-control/70 text-ink-secondary hover:bg-raised-hover hover:text-ink";
 
+  if (extensionsOpen) return <ExtensionsPanel onClose={() => setExtensionsOpen(false)} />;
   return (
     <div
       className="glass-popup-frame"
@@ -632,6 +635,7 @@ export function PluginsPanel() {
             </div>
           </div>
           <p className="mt-0.5 text-[13px] leading-5 text-ink-secondary">{t("apps.subtitle")}</p>
+          <button type="button" onClick={() => setExtensionsOpen(true)} className="mt-3 rounded-lg border border-edge px-3 py-2 text-sm text-ink hover:bg-raised">App extensions</button>
           </div>
           <div className="flex items-center gap-2">
             <label className="flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-control/70 px-3.5 focus-within:ring-1 focus-within:ring-accent">

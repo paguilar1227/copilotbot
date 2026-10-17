@@ -4,7 +4,7 @@ import type { SkillsLibrarySkillWire } from "../../shared/wire.ts";
 import type { AppConfig } from "../config.ts";
 import { botSkillTemplateSchema } from "../new-bot-defaults.ts";
 import { fetchSkillFromSource } from "../skill-fetch.ts";
-import { installLibrarySkill, listLibrarySkills, readLibrarySkillFile, readSkillLibraryIndex, setLibrarySkillReviewState, skillsLibraryEnabled } from "../skill-library.ts";
+import { availableLibrarySkills, availableSkillAssignments, installLibrarySkill, readLibrarySkillFile, readSkillLibraryIndex, setLibrarySkillReviewState, skillsLibraryEnabled } from "../skill-library.ts";
 import {
   installSkill, listBotSkillsWithOrigin, listStagedSkillWrites, parseSkillMd, removeSkill, scanSkillText, setSkillEnabled,
   type SkillListing, type StagedSkillWrite,
@@ -44,8 +44,8 @@ export function createBotSkillsRoutes(deps: BotSkillsRouteDeps): RouteHandler {
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills$/);
     if (m && method === "GET") {
       if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
-      if (skillsLibraryEnabled(cfg)) {
-        const { skills, library } = listBotSkillsWithOrigin(m[1]!, store.bot(m[1])!.assignedSkills);
+      if (skillsLibraryEnabled(cfg) || availableLibrarySkills(cfg).length) {
+        const { skills, library } = listBotSkillsWithOrigin(m[1]!, availableSkillAssignments(cfg, store.bot(m[1])!.assignedSkills), availableLibrarySkills(cfg));
         return json(res, 200, {
           skills,
           library,
@@ -92,9 +92,9 @@ export function createBotSkillsRoutes(deps: BotSkillsRouteDeps): RouteHandler {
 
     m = path.match(/^\/api\/skills-library$/);
     if (m && method === "GET") {
-      if (!skillsLibraryEnabled(cfg)) return json(res, 404, { error: "skills library is not enabled" });
+      if (!skillsLibraryEnabled(cfg) && !availableLibrarySkills(cfg).length) return json(res, 404, { error: "skills library is not enabled" });
       const index = readSkillLibraryIndex();
-      const skills: SkillsLibrarySkillWire[] = listLibrarySkills()
+      const skills: SkillsLibrarySkillWire[] = availableLibrarySkills(cfg)
         .map((listing): SkillsLibrarySkillWire => ({
           name: listing.name,
           description: listing.description,
@@ -134,7 +134,7 @@ export function createBotSkillsRoutes(deps: BotSkillsRouteDeps): RouteHandler {
     }
     m = path.match(/^\/api\/skills-library\/([a-z0-9-]+)$/);
     if (m && method === "GET") {
-      if (!skillsLibraryEnabled(cfg)) return json(res, 404, { error: "skills library is not enabled" });
+      if (!availableLibrarySkills(cfg).some(skill => skill.name === m![1])) return json(res, 404, { error: "skills library is not enabled" });
       const text = readLibrarySkillFile(m[1]!);
       if (text === null) return json(res, 404, { error: "no such skill" });
       return json(res, 200, { text });
@@ -149,13 +149,13 @@ export function createBotSkillsRoutes(deps: BotSkillsRouteDeps): RouteHandler {
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills-library$/);
     if (m && method === "PUT") {
-      if (!skillsLibraryEnabled(cfg)) return json(res, 404, { error: "skills library is not enabled" });
+      if (!skillsLibraryEnabled(cfg) && !availableLibrarySkills(cfg).length) return json(res, 404, { error: "skills library is not enabled" });
       if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
       const parsed = z.object({ skills: z.array(z.string().min(1).max(64)).max(200) }).safeParse(await readBody(req));
       if (!parsed.success) return json(res, 400, { error: "skills must be a list of skill names" });
-      const index = readSkillLibraryIndex();
+      const index = new Set(availableLibrarySkills(cfg).map(skill => skill.name));
       const names = [...new Set(parsed.data.skills)];
-      const unknown = names.filter((name) => !index[name]);
+      const unknown = names.filter((name) => !index.has(name));
       if (unknown.length) return json(res, 422, { error: "not in the library: " + unknown.join(", ") });
       store.patchBot(m[1]!, { assignedSkills: names });
       return json(res, 200, { assignedSkills: names });

@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Board</title><style>body{font:16px system-ui;padding:24px;color-scheme:light dark}input,button{font:inherit;padding:10px;border-radius:6px;border:1px solid #888}form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:0}li{padding:12px;border-bottom:1px solid #888}ul{padding:0;list-style:none}p{line-height:1.5}</style></head><body><h1>Project Board</h1><p>This separate plugin uses the same host contract as Open Brain Lite.</p><form><input aria-label="Card title" required placeholder="Add a card"><button>Add card</button></form><p role="status" id="status"></p><ul></ul><script>
+const list=document.querySelector('ul'),status=document.querySelector('#status');
+function render(cards){list.replaceChildren(...cards.map(card=>{const item=document.createElement('li');item.textContent=card.title;return item}))}
+document.querySelector('form').onsubmit=async event=>{event.preventDefault();try{render(await window.copilotbot.invoke('add',{title:document.querySelector('input').value}));document.querySelector('input').value='';status.textContent='Card saved.'}catch(error){status.textContent=error.message}};
+window.copilotbot.invoke('list').then(render).catch(error=>{status.textContent=error.message});
+</script></body></html>

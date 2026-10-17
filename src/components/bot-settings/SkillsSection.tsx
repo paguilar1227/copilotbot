@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "./BotEditorContext";
-import { skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
+import { skillAuthoringEnabled, skillsLibraryAvailable } from "@/lib/feature-flags";
 import { Switch } from "../SettingsPrimitives";
 import { inputCls } from "./field";
 import { OrgSkillsCard } from "./OrgSkillsCard";
@@ -267,7 +267,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
   const { request: api } = useBotEditor();
   const { state } = useStore();
   const featureEnabled = skillAuthoringEnabled(state.config);
-  const libraryOn = skillsLibraryEnabled(state.config);
+  const libraryOn = skillsLibraryAvailable(state.config);
   const {
     skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,

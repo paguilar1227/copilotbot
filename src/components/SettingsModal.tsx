@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Archive, CircleUser, Coins, FlaskConical, KeyRound, LockKeyhole, Monitor, Palette, ScrollText, Search, Sparkles, TabletSmartphone, Terminal, User, Users, X, Building2, Zap, BookOpen } from "lucide-react";
 import { api, useStore, type AppSettingsSection, type ConfigStatus } from "@/state/store";
-import { builtInBrowserEnabled, routinesInConversationEnabled, showToolCallsEnabled, skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
+import { builtInBrowserEnabled, routinesInConversationEnabled, showToolCallsEnabled, skillAuthoringEnabled, skillsLibraryAvailable } from "@/lib/feature-flags";
 import { localeChoices, type LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
 import { withTourReset } from "@/lib/guided-tour";
@@ -697,7 +697,7 @@ export function SettingsModal() {
     .filter((entry) => entry.id !== "workspaces" || workspacesAvailable(state.config))
     .filter((entry) => entry.id !== "people" || (!window.ogb && state.config?.cloudHome !== true))
     .filter((entry) => entry.id !== "activity" || (!window.ogb && ownerOrAdmin === true));
-  const availableSections = baseSections.filter((entry) => entry.id !== "skills" || skillsLibraryEnabled(state.config));
+  const availableSections = baseSections.filter((entry) => entry.id !== "skills" || skillsLibraryAvailable(state.config));
   const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q));
 
   const simplePages = advanced ? [] : simpleSettingsPages(availableSections, section);
@@ -913,7 +913,7 @@ export function SettingsModal() {
       case "usage":
         return <UsageSection />;
       case "skills":
-        return skillsLibraryEnabled(state.config) ? <SkillsSection /> : null;
+        return skillsLibraryAvailable(state.config) ? <SkillsSection /> : null;
       case "people":
         return <PeopleSection />;
       case "activity":

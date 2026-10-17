@@ -1,0 +1,8 @@
+{
+  "format": "copilotbot.plugin", "apiVersion": 1,
+  "id": "project-board", "name": "Project Board", "version": "1.0.0",
+  "description": "An example extension with its own UI, backend commands, and durable storage.",
+  "backend": "backend.mjs",
+  "pages": [{ "id": "settings", "title": "Board", "entry": "ui/index.html" }],
+  "commands": [{ "id": "list", "title": "Read board" }, { "id": "add", "title": "Add card" }]
+}

@@ -1,4 +1,4 @@
-import { listLibrarySkills, skillsLibraryEnabled } from "../skill-library.ts";
+import { availableLibrarySkills } from "../skill-library.ts";
 import type { WireBot } from "../../shared/wire.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
 import { parseBotProfilePatch } from "../bot-profile.ts";
@@ -139,7 +139,7 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
       const bot = store.createBot({ ...profile.patch, soul: settings.soul, section, modelSelection: selection,
         toolScope: settings.toolScope ?? undefined,
         ...(created?.ok ? { visibility: created.visibility } : {}) });
-      const availableLibrary = new Set(skillsLibraryEnabled(cfg) ? listLibrarySkills().map(skill => skill.name) : []);
+      const availableLibrary = new Set(availableLibrarySkills(cfg).map(skill => skill.name));
       const assignedLibrarySkills = template.librarySkills?.filter(name => availableLibrary.has(name));
       const missingLibrarySkills = template.librarySkills?.filter(name => !availableLibrary.has(name)) ?? [];
       const createdRoutines: Array<{ id: string; enabled: boolean }> = [];
