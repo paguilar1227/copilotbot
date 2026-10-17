@@ -19,6 +19,8 @@ public struct ResourceRow: Codable, Identifiable, Sendable {
     public var enabled: Bool
     public var description: String?
     public var origin: String?
+    public var source: String?
+    public var displayName: String?
     public var id: String { name }
     public init(name: String, enabled: Bool, description: String? = nil, origin: String? = nil) { self.name = name; self.enabled = enabled; self.description = description; self.origin = origin }
 }
@@ -32,6 +34,7 @@ public struct ResourceState: Codable, Sendable {
     public var effective: ResourceAccess
     public var catalog: Catalog
     public var busy: Bool
+    public var warnings: [String]?
 }
 
 /// Lossless JSON for portable settings and revisioned learning operations.

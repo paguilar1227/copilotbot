@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { PASS, type RouteHandler } from '../routes/table.ts';
 import { customMcpServers, type AppConfig } from '../config.ts';
 import type { Store, BotRecord } from '../store.ts';
@@ -6,6 +8,9 @@ import { listSkills, resolveBotSkills, syncSkillLinks } from '../skills.ts';
 import { availableLibrarySkills } from '../skill-library.ts';
 import { resourceAccessSchema, unrestricted, type ResourceAccess, type ResourcePolicies } from './resource-access.ts';
 import { exportBotTemplate, parseBotTemplate, previewBotTemplates, type BotTemplate } from './bot-templates.ts';
+import { inheritedResourceCatalog } from './inherited-resources.ts';
+import { workspaceDir } from '../workspace.ts';
+import type { ResourceRow } from '../../shared/bot-resources.ts';
 import { allMcpServers } from '../plugins/contributions.ts';
 
 function widens(previous: ResourceAccess, next: ResourceAccess): boolean {
@@ -19,19 +24,22 @@ export function resourceRoutes(deps: {
   sessionLive(id: string): boolean;
 }): RouteHandler {
   const { store, cfg, policies } = deps;
-  const catalog = (bots: BotRecord[]) => {
+  const catalog = async (bots: BotRecord[]) => {
     const skills = new Map<string, { name: string; enabled: boolean; description: string; origin: "private" | "library" }>();
     for (const skill of availableLibrarySkills(cfg)) skills.set(skill.name, { ...skill, origin: "library" });
     for (const bot of bots) for (const skill of listSkills(bot.id)) skills.set(skill.name, { ...skill, origin: "private" });
+    const candidate = bots.length === 1 ? bots[0].cwd ?? workspaceDir(bots[0].id) : homedir();
+    const inherited = await inheritedResourceCatalog(cfg, existsSync(candidate) ? candidate : homedir());
+    const publicRow = ({ name, enabled, displayName, description, origin, source }: ResourceRow): ResourceRow => ({ name, enabled, displayName, description, origin, source });
     return {
-      skills: [...skills.values()].map(({ name, enabled, description, origin }) => ({ name, enabled, description, origin })),
-      mcpServers: Object.keys(allMcpServers(cfg.mcpServers)).map(name => ({ name, enabled: name in customMcpServers(cfg) })),
+      warnings: inherited.warnings,
+      skills: [...inherited.skills.map(publicRow), ...[...skills.values()].map(({ name, enabled, description, origin }) => ({ name, enabled, description, origin }))],
+      mcpServers: [...inherited.mcpServers.map(publicRow), ...Object.keys(allMcpServers(cfg.mcpServers)).map(name => ({ name, enabled: name in customMcpServers(cfg) }))],
     };
   };
-  const warnings = (template: BotTemplate) => {
-    const available = catalog([]);
+  const warnings = (template: BotTemplate, available: Awaited<ReturnType<typeof catalog>>) => {
     return [
-      ...[...new Set([...template.skills, ...(template.resources.skills ?? [])])].filter(name => !available.skills.some(skill => skill.name === name && skill.enabled && skill.origin === "library")).map(name => `Skill “${name}” is missing or disabled. Install and review it before use.`),
+      ...[...new Set([...template.skills, ...(template.resources.skills ?? [])])].filter(name => !available.skills.some(skill => skill.name === name && skill.enabled && (skill.origin === "library" || skill.origin === "copilot"))).map(name => `Skill “${name}” is missing or disabled. Install and review it before use.`),
       ...(template.resources.mcpServers ?? []).filter(name => !available.mcpServers.some(server => server.name === name && server.enabled)).map(name => `MCP server “${name}” is missing or disabled. Configure it before use.`),
     ];
   };
@@ -43,11 +51,12 @@ export function resourceRoutes(deps: {
       if (path === '/api/copilotbot/bot-template' && method === 'POST') {
         const body = z.object({ yaml: z.string() }).strict().parse(await readBody(req));
         const parsed = parseBotTemplate(body.yaml);
-        return json(res, 200, { defaults: parsed.defaults, warnings: warnings(parsed.template) });
+        return json(res, 200, { defaults: parsed.defaults, warnings: warnings(parsed.template, await catalog([])) });
       }
       if (path === '/api/copilotbot/bot-templates' && method === 'POST') {
         const body = z.object({ files: z.array(z.object({ filename: z.string().min(1), yaml: z.string() }).strict()).min(1) }).strict().parse(await readBody(req));
-        return json(res, 200, { templates: previewBotTemplates(body.files, warnings) });
+        const available = await catalog([]);
+        return json(res, 200, { templates: previewBotTemplates(body.files, template => warnings(template, available)) });
       }
       const match = path.match(/^\/api\/copilotbot\/bots\/([\w-]+)\/(template|resources)$/);
       const bot = match ? store.bot(match[1]) : undefined;
@@ -78,11 +87,13 @@ export function resourceRoutes(deps: {
         for (const member of members) syncSkillLinks(member.id);
       } else if (method !== 'GET') return PASS;
       const current = bot ? store.bot(bot.id)! : undefined;
+      const available = await catalog(members);
       return json(res, 200, {
+        warnings: available.warnings,
         policy: current ? { skills: current.skillAccess ?? null, mcpServers: current.mcpServers ?? null } : newTeamDraft ? unrestricted() : policies.team(section!),
         inherited: current ? policies.team(current.section) : unrestricted(),
         effective: current ? policies.effective(current) : newTeamDraft ? unrestricted() : policies.team(section!),
-        catalog: catalog(members), busy: members.some(deps.busy),
+        catalog: { skills: available.skills, mcpServers: available.mcpServers }, busy: members.some(deps.busy),
       });
     } catch (error) {
       return json(res, 400, { error: error instanceof Error ? error.message : String(error) });

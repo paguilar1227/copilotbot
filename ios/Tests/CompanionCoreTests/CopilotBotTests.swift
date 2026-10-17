@@ -27,6 +27,12 @@ final class CopilotBotTests: XCTestCase {
         XCTAssertNil(batch.templates[1].preview)
         XCTAssertEqual(batch.templates[1].diagnostics.first?.description, "profile.name (line 8): Required")
     }
+    func testInheritedResourceMetadataPreservesStableIDsAndDisplayLabels() throws {
+        let row = try JSONDecoder().decode(ResourceRow.self, from: Data(#"{"name":"copilot-stable-id","displayName":"Open Brain","source":"Copilot · Personal (.copilot)","origin":"copilot","enabled":true}"#.utf8))
+        XCTAssertEqual(row.id, "copilot-stable-id")
+        XCTAssertEqual(row.displayName, "Open Brain")
+        XCTAssertEqual(row.source, "Copilot · Personal (.copilot)")
+    }
     func testLiveSupportsAzureRealtimeCaptionsAndSettings() throws {
         let json = #"{"provider":"azure","configured":true,"voice":"marin"}"#
         let settings = try JSONDecoder().decode(LiveSettings.self, from: Data(json.utf8))

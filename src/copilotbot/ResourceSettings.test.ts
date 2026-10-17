@@ -96,3 +96,20 @@ it('summarizes large inherited limits and keeps blocked resources searchable', a
   expect(container.textContent).toContain('Not allowed by team');
   expect(container.querySelector<HTMLInputElement>('input[aria-label="Allow skill workflow-999"]')!.disabled).toBe(true);
 });
+
+it('shows inherited display names and sources, searches them, and saves the stable resource ID', async () => {
+  const data = catalog();
+  data.catalog.skills = [{ name: 'copilot-123abc', displayName: 'Research expert', source: 'Copilot · Personal (.copilot)', origin: 'copilot', enabled: true }];
+  const container = await renderCatalog('bot', data);
+  expect(container.textContent).toContain('Research expert');
+  expect(container.textContent).toContain('Personal (.copilot)');
+  await search(container, 'Search skills', 'personal');
+  const checkbox = container.querySelector<HTMLInputElement>('fieldset[aria-label="Skills"] input[type="checkbox"]')!;
+  await act(async () => checkbox.click());
+  expect(data.policy.skills).toEqual([]);
+  await act(async () => container.querySelector<HTMLInputElement>('fieldset[aria-label="Skills"] input[type="checkbox"]')!.click());
+  expect(data.policy.skills).toEqual(['copilot-123abc']);
+  const refresh = [...container.querySelectorAll('button')].find(button => button.textContent === 'Refresh resources')!;
+  await act(async () => refresh.click());
+  expect(fixture.request).toHaveBeenCalled();
+});

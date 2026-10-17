@@ -1,3 +1,4 @@
+import { discoverCopilotResources, prepareCopilotResourceHome, type CopilotResources } from './inherited-resources.ts';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,6 +23,8 @@ export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepa
   let pending: ReturnType<typeof discoverCopilot> | undefined;
   let environment: Record<string, string | undefined> = {};
   let command = 'copilot';
+  let instanceId = 'copilot';
+  const prepared = new Map<string, { catalog: CopilotResources; policy: NonNullable<SendTurnInput['resourceAccess']> }>();
   let mcpDirectory: string | undefined;
   let lastResult: Awaited<ReturnType<typeof discoverCopilot>> | undefined;
   const load = (env: Record<string, string | undefined>, cli: string, refresh = false) => {
@@ -60,9 +63,14 @@ export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepa
     releaseMcpFiles() {
       if (mcpDirectory) rmSync(mcpDirectory, { recursive: true, force: true });
       mcpDirectory = undefined;
+      prepared.clear();
     },
     pickAuthMethod: () => null, authFailure: 'continue',
     transformEnv: env => { delete env.COPILOT_GITHUB_TOKEN; delete env.GH_TOKEN; delete env.GITHUB_TOKEN; },
+    applyTurnEnv(env, ctx) {
+      const entry = prepared.get(ctx.threadId);
+      if (entry) Object.assign(env, prepareCopilotResourceHome({ env, instanceId, threadId: ctx.threadId, ...entry, appMcpNames: ctx.mcpServers.map(server => server.name) }));
+    },
     loginNote: 'Choose Set up Copilot in Settings → Engines to sign in to GitHub.',
     deviceSignIn: { ...signIn, signedIn: async env => { try { await load(env, command, true); return true; } catch { return false; } } },
     install: {
@@ -73,7 +81,8 @@ export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepa
     isAuthenticated: (env, config) => authenticated(env, config.cli),
     selectModel: { configId: 'model' },
     resolveTurnModel: nativeModel,
-    async resolveModels(env, config) {
+    async resolveModels(env, config, id) {
+      instanceId = id;
       const result = await load(env, config.cli, true);
       return { default: result.catalog.default, options: result.catalog.options.map(({ id, label, variants }) => ({ id, label, variants })) };
     },
@@ -81,6 +90,10 @@ export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepa
       if (pending) await pending;
       if (!catalog) await load(environment, command);
       check(turn.model, turn.effort);
+      if (turn.resourceAccess && (turn.resourceAccess.skills !== null || turn.resourceAccess.mcpServers !== null)) {
+        const native = await discoverCopilotResources(command, environment, turn.cwd ?? process.cwd(), instanceId);
+        prepared.set(turn.threadId, { catalog: native, policy: turn.resourceAccess });
+      } else prepared.delete(turn.threadId);
       return { ...turn, model: nativeModel(turn.model) };
     },
     async configureSession({ request, sessionId, turn }) {

@@ -23,7 +23,10 @@ it('sets up Copilot with a device code and runs a selected model and effort thro
     await expect.poll(async () => (await request(`/api/instances/copilot/auth/status?flowId=${auth.flowId}`)).auth.phase, { timeout: 10000 }).toBe('succeeded');
     info = (await request('/api/instances')).instances.find((i: { instanceId: string }) => i.instanceId === 'copilot');
     expect(info.snapshot.authenticated).toBe(true);
-    expect(info.models.options.map((m: { id: string }) => m.id)).toEqual(['fixture-gpt', 'fixture-claude']);
+    await expect.poll(async () => {
+      const refreshed = (await request('/api/instances')).instances.find((i: { instanceId: string }) => i.instanceId === 'copilot');
+      return refreshed.models.options.map((m: { id: string }) => m.id);
+    }, { timeout: 10000 }).toEqual(['fixture-gpt', 'fixture-claude']);
     const control = (args: string[]) => runControlOmb([...args, '--url', fixture.info.url]);
     const result = await control(['new-bot', '--name', 'Copilot acceptance']) as { bot: { id: string; activeTaskId: string } };
     const { bot } = result;

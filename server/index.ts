@@ -13365,7 +13365,7 @@ function resourceTurnFields(bot: BotRecord) {
   const restrictResources = policy.skills !== null || policy.mcpServers !== null;
   const fields = settingsTurnFields(cfg, DATA_DIR, managedPolicy.restrictsMcp() || restrictResources);
   if (policy.skills !== null) delete fields.userSkillsDir;
-  return { ...fields, restrictResources };
+  return { ...fields, restrictResources, resourceAccess: { ...policy, ...(managedPolicy.restrictsMcp() ? { mcpServers: [] } : {}) } };
 }
 
 function engineMcpServers(bot: BotRecord) {

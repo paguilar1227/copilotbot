@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { useBotEditor } from '@/components/bot-settings/BotEditorContext';
 import { api, useStore, type Bot } from '@/state/store';
 import { Select } from '@/components/Select';
-import type { ResourceAccess, ResourceState } from '../../shared/bot-resources';
+import type { ResourceAccess, ResourceState, ResourceRow } from '../../shared/bot-resources';
 
-type ResourceRow = { name: string; enabled: boolean; description?: string };
 
 function ResourceList({ kind, known, selected, inherited, disabled, onChange }: {
   kind: keyof ResourceAccess;
@@ -24,7 +23,7 @@ function ResourceList({ kind, known, selected, inherited, disabled, onChange }: 
   const teamAllows = (name: string) => inheritedNames === null || inheritedNames.has(name);
   const isSelected = (row: ResourceRow) => teamAllows(row.name) && (selectedNames === null ? row.enabled : selectedNames.has(row.name));
   const search = query.trim().toLowerCase();
-  const visible = rows.filter(row => `${row.name} ${row.description ?? ''}`.toLowerCase().includes(search));
+  const visible = rows.filter(row => `${row.displayName ?? row.name} ${row.description ?? ''} ${row.source ?? ''}`.toLowerCase().includes(search));
   const selectedCount = rows.filter(isSelected).length;
   return <fieldset aria-label={label} className="min-w-0 rounded-xl bg-card p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -44,12 +43,13 @@ function ResourceList({ kind, known, selected, inherited, disabled, onChange }: 
       {!rows.length ? <p className="py-2 text-[13px] text-ink-secondary">No {label.toLowerCase()} configured yet.</p>
         : !visible.length ? <p role="status" className="py-2 text-[13px] text-ink-secondary">No {label.toLowerCase()} match “{query.trim()}”.</p>
         : <div className="divide-y divide-hairline/40">{visible.map(row => <label key={row.name} className="flex items-start gap-3 py-2 text-[13px] text-ink">
-          <input type="checkbox" aria-label={`Allow ${kind === 'skills' ? 'skill' : 'MCP'} ${row.name}`} className="mt-1 shrink-0" checked={isSelected(row)}
+          <input type="checkbox" aria-label={`Allow ${kind === 'skills' ? 'skill' : 'MCP'} ${row.displayName ?? row.name}${row.source ? ` (${row.source})` : ""}`} className="mt-1 shrink-0" checked={isSelected(row)}
             disabled={disabled || !teamAllows(row.name) || (!row.enabled && !selectedNames?.has(row.name))} onChange={event => {
               const current = selected ?? known.filter(item => item.enabled).map(item => item.name);
               onChange(event.target.checked ? [...new Set([...current, row.name])] : current.filter(name => name !== row.name));
             }} />
-          <span className="min-w-0 break-words"><span className="font-medium">{row.name}</span>
+          <span className="min-w-0 break-words"><span className="font-medium">{row.displayName ?? row.name}</span>
+            {row.source && <span className="block text-[12px] text-ink-secondary">{row.source}</span>}
             {row.description && <span className="line-clamp-2 text-[12px] text-ink-secondary">{row.description}</span>}
             {!teamAllows(row.name) ? <span className="block text-[12px] text-ink-secondary">Not allowed by team</span> : !row.enabled ? <span className="block text-[12px] text-ink-secondary">Missing or disabled — install and review before use</span> : null}
           </span>
@@ -85,9 +85,11 @@ export function ResourceSettings({ bot, team }: { bot?: Bot; team?: string }) {
   const busy = bot ? !!bot.busy : state.bots.some(member => (member.section ?? '') === (team ?? '') && member.busy);
   const disabled = saving || busy;
   return <section className="space-y-4" aria-label="Resource access">
+    <div className="flex items-center justify-between gap-3"><span className="text-[13px] font-medium text-ink">Available resources</span><button type="button" disabled={saving} className="text-[13px] text-accent disabled:opacity-40" onClick={() => setRevision(value => value + 1)}>Refresh resources</button></div>
     <p className="text-[13px] text-ink-secondary">{bot
-      ? 'Choose the app-managed skills and MCP servers this bot can use. Team limits also apply. Skills must be installed and enabled.'
+      ? 'Choose the skills and MCP servers this bot can use, including inherited Copilot resources. Team limits also apply. Skills must be installed and enabled.'
       : 'Team limits apply to every member, including bots added later. Each bot can select a smaller set. Skills must also be assigned and enabled for that bot.'}</p>
+    {data?.warnings?.map(message => <p key={message} role="status" className="text-[12px] text-warning">{message}</p>)}
     {data && (['skills', 'mcpServers'] as const).map(kind => <ResourceList key={`${path}:${kind}`} kind={kind} known={data.catalog[kind]} selected={data.policy[kind]} inherited={data.inherited[kind]} disabled={disabled}
       onChange={names => { void save({ ...data.policy, [kind]: names }); }} />)}
     {!data && !error && <p role="status" className="text-[13px] text-ink-secondary">Loading resources…</p>}

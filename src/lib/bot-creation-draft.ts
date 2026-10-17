@@ -109,7 +109,7 @@ export class BotCreationDraft {
 
   private async resources(): Promise<ResourceState> {
     const available = await this.network<ResourceState>(`/api/copilotbot/resources?section=${encodeURIComponent(this.bot.section ?? "")}&draft=1`);
-    const skills = available.catalog.skills.filter(skill => skill.origin === "library");
+    const skills = available.catalog.skills.filter(skill => (skill.origin === "library" || skill.origin === "copilot"));
     for (const skill of this.template.skills) {
       const index = skills.findIndex(item => item.name === skill.name);
       if (index >= 0) skills.splice(index, 1);

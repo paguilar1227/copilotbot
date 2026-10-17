@@ -93,6 +93,7 @@ export interface SendTurnInput {
   toolScope?: ToolScope;
   /** Reject inherited native configuration when owner-selected resource limits require isolation. */
   restrictResources?: boolean;
+  resourceAccess?: import("../shared/bot-resources.ts").ResourceAccess;
   /** A guest turn: no shell or command execution, no reads outside its folder. Sent only to drivers whose guestTurns is "confined". */
   guestConfined?: boolean;
   /** Why this turn is confined, in the owner's words, for a refusal to end with. */

@@ -1,6 +1,22 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
-import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { appendFileSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
+function resources() {
+  const data = process.env.FAKE_COPILOT_CATALOG ? JSON.parse(readFileSync(process.env.FAKE_COPILOT_CATALOG, 'utf8')) : { skills: [], mcpServers: {} };
+  const settingsPath = join(process.env.COPILOT_HOME || join(process.env.HOME, '.copilot'), 'settings.json');
+  const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
+  return {
+    skills: data.skills.map(row => ({ ...row, enabled: row.enabled !== false && !(settings.disabledSkills ?? []).includes(row.name) })),
+    mcpServers: Object.fromEntries(Object.entries(data.mcpServers).map(([name, row]) => [name, { ...row, enabled: row.enabled !== false && !(settings.disabledMcpServers ?? []).includes(name) }])),
+  };
+}
+if (['skill', 'mcp'].includes(process.argv[2]) && process.argv[3] === 'list') {
+  const catalog = resources();
+  const output = process.argv[2] === 'skill' ? catalog.skills : { mcpServers: catalog.mcpServers };
+  await new Promise((resolve, reject) => process.stdout.write(JSON.stringify(output) + '\n', error => error ? reject(error) : resolve()));
+  process.exit(0);
+}
 const authPath = process.env.HOME + '/copilot-authenticated';
 if (process.argv.includes('--version')) { console.log('Copilot CLI 1.0.98 fixture'); process.exit(0); }
 if (process.argv.includes('login')) {
@@ -36,7 +52,7 @@ createInterface({ input: process.stdin }).on('line', line => {
     result = snapshot();
   } else if (message.method === 'session/prompt') {
     const text = `NATIVE_EFFORT_OK:${model}:${effort}`;
-    if (process.env.FAKE_COPILOT_RECEIPTS) appendFileSync(process.env.FAKE_COPILOT_RECEIPTS, JSON.stringify({ model, effort }) + '\n');
+    if (process.env.FAKE_COPILOT_RECEIPTS) appendFileSync(process.env.FAKE_COPILOT_RECEIPTS, JSON.stringify({ model, effort, ...(process.env.FAKE_COPILOT_CATALOG ? { resources: resources(), copilotHome: process.env.COPILOT_HOME } : {}) }) + '\n');
     send({ method: 'session/update', params: { sessionId, update: {
       sessionUpdate: 'agent_message_chunk', content: { type: 'text', text },
     } } });

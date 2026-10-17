@@ -19,6 +19,7 @@ struct ResourceAccessView: View {
             if let data {
                 resourceLink("Skills", rows: data.catalog.skills, key: \.skills, data: data)
                 resourceLink("MCP servers", rows: data.catalog.mcpServers, key: \.mcpServers, data: data)
+                ForEach(data.warnings ?? [], id: \.self) { Text($0).foregroundStyle(.orange) }
                 if data.busy { Text("Stop the affected bots before changing access.").foregroundStyle(.secondary) }
             } else if error == nil { ProgressView("Loading resources…") }
             if let error { Section { Text(error).foregroundStyle(.red); Button("Retry") { Task { await load() } } } }
@@ -77,7 +78,7 @@ private struct ResourcePickerView: View {
     private func allowed(_ name: String) -> Bool { data.inherited[keyPath: key]?.contains(name) ?? true }
     private func checked(_ row: ResourceRow) -> Bool { allowed(row.name) && (selected?.contains(row.name) ?? row.enabled) }
     private var matches: [ResourceRow] {
-        allRows.filter { query.isEmpty || ($0.name + " " + ($0.description ?? "")).localizedCaseInsensitiveContains(query) }
+        allRows.filter { query.isEmpty || (($0.displayName ?? $0.name) + " " + ($0.description ?? "") + " " + ($0.source ?? "")).localizedCaseInsensitiveContains(query) }
     }
     var body: some View {
         List {
@@ -100,7 +101,8 @@ private struct ResourcePickerView: View {
                         policy[keyPath: key] = names
                     })) {
                         VStack(alignment: .leading) {
-                            Text(row.name)
+                            Text(row.displayName ?? row.name)
+                            if let source = row.source { Text(source).font(.caption).foregroundStyle(.secondary) }
                             if let description = row.description { Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                             if !allowed(row.name) { Text("Not allowed by team").font(.caption).foregroundStyle(.secondary) }
                             else if !row.enabled { Text("Missing or disabled on computer").font(.caption).foregroundStyle(.secondary) }
