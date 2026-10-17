@@ -875,6 +875,7 @@ export interface BotAssignedSkillsWire {
 }
 
 export type ServerFrame =
+  | { kind: "workspace-projects" }
   | { kind: "sections"; sections: string[] }
   | { kind: "bot.queued"; queues: BotQueuedMessages }
   | { kind: "message"; threadId: string; message: WireMessage }

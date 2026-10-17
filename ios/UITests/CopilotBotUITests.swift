@@ -2,6 +2,52 @@ import XCTest
 
 final class CopilotBotUITests: XCTestCase {
     @MainActor
+    func testProjectGroupsPinnedBotAndTeamsAndCollapses() {
+        let app = XCUIApplication()
+        app.terminate()
+        app.launchArguments = ["-store-preview", "-roster-preview", "-copilotbot-preview", "-companion.onboarding.welcomeSeen", "YES", "-companion.onboarding.notificationsSeen", "YES"]
+        app.launch()
+        if app.buttons["Connect computer"].waitForExistence(timeout: 2) { app.terminate(); app.launch() }
+        XCTAssertTrue(app.buttons["Create"].waitForExistence(timeout: 10))
+        app.buttons["Create"].tap()
+        app.buttons["Projects"].tap()
+        XCTAssertTrue(app.buttons["New project"].waitForExistence(timeout: 5))
+        app.buttons["New project"].tap()
+        let name = app.textFields["Project name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap(); name.typeText("Release")
+        func select(_ name: String) {
+            let control = app.switches[name]
+            XCTAssertTrue(control.waitForExistence(timeout: 5))
+            let target = control.switches.firstMatch.exists ? control.switches.firstMatch : control
+            target.tap()
+            XCTAssertEqual(target.value as? String, "1")
+        }
+        select("Engineering")
+        select("Empty team")
+        let search = app.textFields["Search teams and bots"]
+        search.tap(); search.typeText("Pixel")
+        XCTAssertTrue(app.switches["Pixel"].waitForExistence(timeout: 5))
+        select("Pixel")
+        record("Project editor with teams and pinned bot", app)
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Collapse project Release"].waitForExistence(timeout: 5))
+        let divider = app.buttons["Collapse project Release"]
+        while !divider.isHittable { app.swipeUp() }
+        record("Project divider with team and individual bot", app)
+        divider.tap()
+        XCTAssertTrue(app.buttons["Expand project Release"].waitForExistence(timeout: 5))
+        let hiddenTeam = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["Engineering"])
+        wait(for: [hiddenTeam], timeout: 5)
+        record("Collapsed project", app)
+        app.buttons["Expand project Release"].tap()
+        XCTAssertTrue(app.staticTexts["Engineering"].waitForExistence(timeout: 5))
+        record("Expanded project", app)
+    }
+
+    @MainActor
     func testLargeTeamCatalogSearchSelectionAndPersistence() {
         let app = launch()
         XCTAssertTrue(app.buttons["resources-skills"].waitForExistence(timeout: 10))

@@ -2,6 +2,21 @@ import XCTest
 @testable import CompanionCore
 
 final class CopilotBotTests: XCTestCase {
+    func testWorkspaceProjectKeepsStableTeamIdentityAndCollapseAcrossReload() throws {
+        let json = #"{"projects":[{"id":"project","name":"Release","revision":2,"collapsed":true,"teamIds":["stable-team"],"botIds":["bot"]}],"teams":[{"id":"stable-team","name":"Renamed team"}]}"#
+        let catalog = try JSONDecoder().decode(WorkspaceProjectCatalog.self, from: Data(json.utf8))
+        XCTAssertTrue(catalog.projects[0].collapsed)
+        XCTAssertEqual(catalog.teamNames(for: catalog.projects[0]), ["Renamed team"])
+        XCTAssertEqual(catalog.sidebarTeams(for: catalog.projects[0], bots: [], rooms: []).map(\.name), ["Renamed team"])
+        let reloaded = try JSONDecoder().decode(WorkspaceProjectCatalog.self, from: JSONEncoder().encode(catalog))
+        XCTAssertEqual(reloaded.projects[0].botIds, ["bot"])
+        XCTAssertEqual(reloaded.projects[0].revision, 2)
+        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "bots-paged", withExtension: "json", subdirectory: "Fixtures") ?? Bundle.module.url(forResource: "bots-paged", withExtension: "json"))
+        var bot = try XCTUnwrap(JSONDecoder().decode(Fleet.self, from: Data(contentsOf: fixture)).bots.first)
+        bot.id = "bot"; bot.pinned = true; bot.section = nil; bot.hidden = false
+        XCTAssertEqual(catalog.standaloneBots(for: catalog.projects[0], bots: [bot]).map(\.id), ["bot"])
+    }
+
     func testRosterDecodesCustomAndBuiltInAvatars() throws {
         let entry = try JSONDecoder().decode(RosterEntry.self, from: Data(#"{"id":"team","kind":"team","name":"Design","description":"","revision":1,"memberCount":2,"usedBy":[],"activeCopies":0,"avatars":[{"name":"Portrait","color":"blue","avatarUrl":"/api/attachments/portrait.png","avatarCrop":"rounded","avatarZoom":2,"avatarFocusX":0.25,"avatarFocusY":0.75},{"name":"Star","color":"purple","mascotBody":"star","mascotExpression":"happy"}]}"#.utf8))
         XCTAssertEqual(entry.avatars?.first?.avatarCrop, .rounded)

@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 import { api, useStore, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type BotProject, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { approvalModeFor } from "../../shared/approval-mode";
+import { useWorkspaceProjects, WorkspaceProjectSection, WorkspaceProjectDialog } from "@/copilotbot/WorkspaceProjects";
+import { projectStandaloneBots, type WorkspaceProject } from "../../shared/workspace-projects";
 import { RosterDialog } from "@/copilotbot/RosterDialog";
 import { liveActivityLabel } from "@/lib/live-activity";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
@@ -1683,6 +1685,8 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const [newTaskFolderBotId, setNewTaskFolderBotId] = useState<string | null>(null);
   const newTaskFolderBot = state.bots.find((bot) => bot.id === newTaskFolderBotId);
   const [teamLibraryOpen, setTeamLibraryOpen] = useState(false);
+  const projects = useWorkspaceProjects(teamSettingsAllowed === true, JSON.stringify([state.sections, state.bots.map(bot => [bot.id, bot.section, bot.hidden])]));
+  const [editingProject, setEditingProject] = useState<WorkspaceProject | null | undefined>(undefined);
   const [rosterSource, setRosterSource] = useState<string | null>(null);
   const [teamInstallUrl, setTeamInstallUrl] = useState<string | null>(null);
   const [archivedBotsOpen, setArchivedBotsOpen] = useState(false);
@@ -1829,18 +1833,24 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
 
   const q = query.trim().toLowerCase();
 
+  const matchedProjects = projects.catalog.projects.filter(project => q && project.name.toLowerCase().includes(q));
+  const matchedProjectTeams = new Set(matchedProjects.flatMap(project => projects.catalog.teams.filter(team => project.teamIds.includes(team.id)).map(team => team.name)));
+  const matchedProjectBots = new Set(matchedProjects.flatMap(project => project.botIds));
+  const matchedProjectIds = new Set(matchedProjects.map(project => project.id));
+  const assignedBotIds = new Set(projects.catalog.projects.flatMap(project => project.botIds));
+  const assignedTeamNames = new Set(projects.catalog.teams.filter(team => projects.catalog.projects.some(project => project.teamIds.includes(team.id))).map(team => team.name));
   const matchingBots = state.bots
     .filter((b) => !b.hidden)
     .filter(
       (b) =>
-        !q ||
+        !q || matchedProjectBots.has(b.id) || matchedProjectTeams.has(b.section ?? "") ||
         b.name.toLowerCase().includes(q) ||
         (b.title ?? "").toLowerCase().includes(q) ||
         botPreview(b, visibleMessages(b), state.instances, advanced).toLowerCase().includes(q) ||
         b.tasks?.some((task) => !task.routineRunId && task.title.toLowerCase().includes(q)) ||
         b.projects?.some((folder) => folder.name.toLowerCase().includes(q)),
     );
-  const visibleGroups = state.groups.filter((g) => !q || g.name.toLowerCase().includes(q) || g.tasks?.some((task) => task.title.toLowerCase().includes(q)));
+  const visibleGroups = state.groups.filter((g) => !q || matchedProjectTeams.has(g.section ?? "") || g.name.toLowerCase().includes(q) || g.tasks?.some((task) => task.title.toLowerCase().includes(q)));
   const {
     unsectionedChief,
     pinnedBots,
@@ -1850,7 +1860,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   } = partitionSidebarBots(matchingBots, { universalPins });
   const { botChats, sectionedRooms, unsectionedRooms } = partitionSidebarGroups(visibleGroups);
 
-  const sectionNames: string[] = (state.sections ?? []).filter((name) => !q || name.toLowerCase().includes(q.toLowerCase()));
+  const sectionNames: string[] = (state.sections ?? []).filter((name) => !q || matchedProjectTeams.has(name) || name.toLowerCase().includes(q.toLowerCase()));
   for (const bot of sectionedBots) {
     if (!sectionNames.includes(bot.section!)) sectionNames.push(bot.section!);
   }
@@ -1860,6 +1870,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   for (const group of sectionedRooms) {
     if (!sectionNames.includes(group.section!)) sectionNames.push(group.section!);
   }
+  const matchingSectionNames = new Set(sectionNames);
   const naturalSectionIds = [
     ...(pinnedBots.length > 0 && !universalPins ? [PINNED_SECTION_ID] : []),
     ...(unsectionedRooms.length > 0 ? [CHANNELS_SECTION_ID] : []),
@@ -1947,6 +1958,114 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const pendingBotUndo = teamFeedback?.restoreBot;
   const botRow = (bot: Bot) => botRowProps(state, dispatch, bot, { density, quiet: quietRows, query: q, onMenu: setMenu });
 
+  const renderSection = (id: string, index: number, inProject = false) => {
+    const sectionName = userSectionName(id);
+    const sectionChiefItems = sectionName
+      ? (inProject ? matchingBots.filter(bot => bot.chiefOfStaff) : sectionChiefs).filter((bot) => bot.section === sectionName)
+      : [];
+    const sectionGroupItems =
+      id === CHANNELS_SECTION_ID
+        ? unsectionedRooms
+        : id === BOT_CHATS_SECTION_ID
+          ? botChats
+          : sectionName
+            ? sectionedRooms.filter((group) => group.section === sectionName)
+            : [];
+    const sectionBotItems =
+      id === PINNED_SECTION_ID
+        ? pinnedBots
+        : id === BOTS_SECTION_ID
+          ? unsectionedBots.filter(bot => !assignedBotIds.has(bot.id))
+          : sectionName
+            ? (inProject ? matchingBots.filter(bot => !bot.chiefOfStaff) : sectionedBots).filter((bot) => bot.section === sectionName)
+            : [];
+    const collapsed = sectionCollapsed(id);
+    const queued = collapsed ? [...sectionChiefItems, ...sectionBotItems].flatMap((bot) =>
+      sidebarBotActivityTasks(bot, state.pendingQueued).filter((task) => task.queued).map((task) => `${bot.name}: ${task.title}`)) : [];
+    const attention = collapsed
+      ? sidebarSectionAttention(
+          [...sectionChiefItems, ...sectionBotItems],
+          sectionGroupItems,
+        )
+    : undefined;
+  return (
+    <div
+      key={id}
+      data-sidebar-section-id={id}
+      onDragOver={(event) => updateSectionDropTarget(event, id)}
+      onDrop={dropSection}
+      className={cn(
+        "flex flex-col gap-0.5",
+        density !== "icons" && index > 0 && "pt-3",
+      )}
+    >
+      {dropTarget?.id === id && dropTarget.place === "before" && draggingSectionId !== id && (
+        <div className="mx-2 h-0.5 rounded-full bg-accent" />
+      )}
+      {density !== "icons" && (
+        <SidebarSectionHeader
+          name={sectionLabel(id)}
+          onContextMenu={!remoteClient && layoutInteractive && sectionName ? (event) => {
+            event.preventDefault();
+            teamMenuReturn.current = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
+            setTeamMenu({ name: sectionName, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 266)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 190)) });
+          } : undefined}
+          collapsed={collapsed}
+          attention={attention}
+          onToggle={layoutInteractive ? () => toggleSection(id) : undefined}
+          reorderable={layoutInteractive && sectionIds.length > 1}
+          dragging={draggingSectionId === id}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("application/x-openmausbot-sidebar-section", id);
+            event.dataTransfer.setData("text/plain", id);
+            sectionDragRef.current = { from: id, over: null };
+            setDraggingSectionId(id);
+          }}
+          onDragEnd={resetSectionDrag}
+          onMove={(direction) => moveSidebarSection(id, direction)}
+          onDelete={!remoteClient && sectionName ? () => setDeletingTeam(sectionName) : undefined}
+        />
+      )}
+      {collapsed && queued.length > 0 && <button type="button" onClick={() => toggleSection(id)}
+        title={`${t("task.queued")} · ${queued.join(", ")}`} aria-label={`${t("sidebar.section.expand", { name: sectionLabel(id) })} · ${t("task.queued")} · ${queued.join(", ")}`}
+        className="mx-3 mb-1 inline-flex h-7 items-center self-start rounded-full bg-raised/50 px-3 text-[13px] font-medium leading-4 text-ink-secondary hover:text-ink">{t("task.queued")} · {queued.length}</button>}
+      {!collapsed && (
+        <>
+          {sectionChiefItems.map((bot) => <BotListItem key={bot.id} {...botRow(bot)} />)}
+          {sectionGroupItems.map((group) => (
+            <GroupListItem
+              key={group.id}
+              group={group}
+              density={density}
+              quiet={quietRows}
+              query={q}
+              onMenu={setRoomMenu}
+            />
+          ))}
+          {id === PINNED_SECTION_ID ? (
+            <PinnedBotRoster
+              bots={sectionBotItems}
+              density={density}
+              circles={pinnedCircles}
+              row={botRow}
+              listItem={BotListItem}
+            />
+          ) : sectionBotItems.map((bot) => <BotListItem key={bot.id} {...botRow(bot)} />)}
+          {!remoteClient && sectionName && layoutInteractive && (
+            <button onClick={() => setMoveToTeam(sectionName)} aria-label={t(state.bots.some(bot => !bot.hidden && bot.section?.trim() === sectionName) ? "team.manageBotsIn" : "team.addBotsTo", { name: sectionName })}
+              className="mx-3 my-1 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink">
+              <Plus size={13} /> {t(state.bots.some(bot => !bot.hidden && bot.section?.trim() === sectionName) ? "team.manageBots" : "team.addBots")}
+            </button>
+          )}
+        </>
+      )}
+      {dropTarget?.id === id && dropTarget.place === "after" && draggingSectionId !== id && (
+        <div className="mx-2 h-0.5 rounded-full bg-accent" />
+      )}
+    </div>
+  );
+  };
   return (
     <aside
       ref={sidebarRef}
@@ -2121,6 +2240,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
                   <Users size={16} className="text-ink-secondary" />
                   {t("sidebar.newChannel.title")}
                 </button>
+                {teamSettingsAllowed && <button type="button" onClick={() => { setPlusOpen(false); setEditingProject(null); }} className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[14px] text-ink hover:bg-raised/70"><FolderPlus size={16} className="text-ink-secondary" />New project</button>}
                 {!remoteClient && <button
                   onClick={() => { setPlusOpen(false); setNewTeam(true); }}
                   className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[14px] text-ink hover:bg-raised/70"
@@ -2266,119 +2386,27 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
           {matchingBots.length === 0 && visibleGroups.length === 0 && q && q.length < MIN_QUERY && (
             <div className="px-3 py-6 text-center text-[13px] text-ink-secondary">{t("sidebar.noMatch", { query })}</div>
           )}
-          {unsectionedChief && (
+          {unsectionedChief && !assignedBotIds.has(unsectionedChief.id) && (
             <div className="mb-1.5">
               <BotListItem {...botRow(unsectionedChief)} />
             </div>
           )}
-          {sectionIds.map((id, index) => {
-            const sectionName = userSectionName(id);
-            const sectionChiefItems = sectionName
-              ? sectionChiefs.filter((bot) => bot.section === sectionName)
-              : [];
-            const sectionGroupItems =
-              id === CHANNELS_SECTION_ID
-                ? unsectionedRooms
-                : id === BOT_CHATS_SECTION_ID
-                  ? botChats
-                  : sectionName
-                    ? sectionedRooms.filter((group) => group.section === sectionName)
-                    : [];
-            const sectionBotItems =
-              id === PINNED_SECTION_ID
-                ? pinnedBots
-                : id === BOTS_SECTION_ID
-                  ? unsectionedBots
-                  : sectionName
-                    ? sectionedBots.filter((bot) => bot.section === sectionName)
-                    : [];
-            const collapsed = sectionCollapsed(id);
-            const queued = collapsed ? [...sectionChiefItems, ...sectionBotItems].flatMap((bot) =>
-              sidebarBotActivityTasks(bot, state.pendingQueued).filter((task) => task.queued).map((task) => `${bot.name}: ${task.title}`)) : [];
-            const attention = collapsed
-              ? sidebarSectionAttention(
-                  [...sectionChiefItems, ...sectionBotItems],
-                  sectionGroupItems,
-                )
-              : undefined;
-            return (
-              <div
-                key={id}
-                data-sidebar-section-id={id}
-                onDragOver={(event) => updateSectionDropTarget(event, id)}
-                onDrop={dropSection}
-                className={cn(
-                  "flex flex-col gap-0.5",
-                  density !== "icons" && index > 0 && "pt-3",
-                )}
-              >
-                {dropTarget?.id === id && dropTarget.place === "before" && draggingSectionId !== id && (
-                  <div className="mx-2 h-0.5 rounded-full bg-accent" />
-                )}
-                {density !== "icons" && (
-                  <SidebarSectionHeader
-                    name={sectionLabel(id)}
-                    onContextMenu={!remoteClient && layoutInteractive && sectionName ? (event) => {
-                      event.preventDefault();
-                      teamMenuReturn.current = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
-                      setTeamMenu({ name: sectionName, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 266)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 190)) });
-                    } : undefined}
-                    collapsed={collapsed}
-                    attention={attention}
-                    onToggle={layoutInteractive ? () => toggleSection(id) : undefined}
-                    reorderable={layoutInteractive && sectionIds.length > 1}
-                    dragging={draggingSectionId === id}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("application/x-openmausbot-sidebar-section", id);
-                      event.dataTransfer.setData("text/plain", id);
-                      sectionDragRef.current = { from: id, over: null };
-                      setDraggingSectionId(id);
-                    }}
-                    onDragEnd={resetSectionDrag}
-                    onMove={(direction) => moveSidebarSection(id, direction)}
-                    onDelete={!remoteClient && sectionName ? () => setDeletingTeam(sectionName) : undefined}
-                  />
-                )}
-                {collapsed && queued.length > 0 && <button type="button" onClick={() => toggleSection(id)}
-                  title={`${t("task.queued")} · ${queued.join(", ")}`} aria-label={`${t("sidebar.section.expand", { name: sectionLabel(id) })} · ${t("task.queued")} · ${queued.join(", ")}`}
-                  className="mx-3 mb-1 inline-flex h-7 items-center self-start rounded-full bg-raised/50 px-3 text-[13px] font-medium leading-4 text-ink-secondary hover:text-ink">{t("task.queued")} · {queued.length}</button>}
-                {!collapsed && (
-                  <>
-                    {sectionChiefItems.map((bot) => <BotListItem key={bot.id} {...botRow(bot)} />)}
-                    {sectionGroupItems.map((group) => (
-                      <GroupListItem
-                        key={group.id}
-                        group={group}
-                        density={density}
-                        quiet={quietRows}
-                        query={q}
-                        onMenu={setRoomMenu}
-                      />
-                    ))}
-                    {id === PINNED_SECTION_ID ? (
-                      <PinnedBotRoster
-                        bots={sectionBotItems}
-                        density={density}
-                        circles={pinnedCircles}
-                        row={botRow}
-                        listItem={BotListItem}
-                      />
-                    ) : sectionBotItems.map((bot) => <BotListItem key={bot.id} {...botRow(bot)} />)}
-                    {!remoteClient && sectionName && layoutInteractive && (
-                      <button onClick={() => setMoveToTeam(sectionName)} aria-label={t(state.bots.some(bot => !bot.hidden && bot.section?.trim() === sectionName) ? "team.manageBotsIn" : "team.addBotsTo", { name: sectionName })}
-                        className="mx-3 my-1 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink">
-                        <Plus size={13} /> {t(state.bots.some(bot => !bot.hidden && bot.section?.trim() === sectionName) ? "team.manageBots" : "team.addBots")}
-                      </button>
-                    )}
-                  </>
-                )}
-                {dropTarget?.id === id && dropTarget.place === "after" && draggingSectionId !== id && (
-                  <div className="mx-2 h-0.5 rounded-full bg-accent" />
-                )}
-              </div>
-            );
+          {projects.catalog.projects.map(project => {
+            const teams = projects.catalog.teams.filter(team => project.teamIds.includes(team.id) && matchingSectionNames.has(team.name));
+            const bots = projectStandaloneBots(project, matchingBots);
+            if (q && !matchedProjectIds.has(project.id) && !teams.length && !bots.length) return null;
+            const count = projects.catalog.teams.filter(team => project.teamIds.includes(team.id)).length + projectStandaloneBots(project, state.bots).length;
+            return <WorkspaceProjectSection key={project.id} project={project} count={count} compact={density === 'icons'} pending={projects.pending}
+              expanded={Boolean(q) || !project.collapsed} onEdit={() => setEditingProject(project)} onToggle={() => { if (!q) void projects.mutate('PATCH', { id: project.id, revision: project.revision, collapsed: !project.collapsed }); }}>
+              {teams.map((team, index) => renderSection(userSectionId(team.name), index, true))}
+              {bots.map(bot => <BotListItem key={bot.id} {...botRow(bot)} />)}
+            </WorkspaceProjectSection>;
           })}
+          {sectionIds.filter(id => {
+            const name = userSectionName(id);
+            return name ? !assignedTeamNames.has(name) : id !== BOTS_SECTION_ID || unsectionedBots.some(bot => !assignedBotIds.has(bot.id));
+          }).map((id, index) => renderSection(id, index))}
+          {projects.error && teamSettingsAllowed && <div role="alert" className="px-3 py-2 text-[12px] text-danger">{projects.error}<button type="button" className="ml-2 underline" onClick={() => void projects.reload()}>Retry projects</button></div>}
           <SearchResults query={query} onLanded={() => setQuery("")} />
           {showPinnedCircleThreads && (
             <PinnedCircleThreadSection
@@ -2443,6 +2471,9 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
           onNewFolder={setNewFolderBotId}
           onNewTaskFolder={setNewTaskFolderBotId}
         />
+      {editingProject !== undefined && <WorkspaceProjectDialog project={editingProject} catalog={projects.catalog} bots={state.bots} pending={projects.pending} error={projects.error}
+        onClose={() => setEditingProject(undefined)} onSave={value => projects.mutate(editingProject ? 'PUT' : 'POST', value)}
+        onRemove={() => projects.mutate('DELETE', { id: editingProject?.id, revision: editingProject?.revision })} />}
       {showThreads && newFolderBotId && state.bots.find((bot) => bot.id === newFolderBotId) && <BotProjectDialog bot={state.bots.find((bot) => bot.id === newFolderBotId)!} onClose={() => setNewFolderBotId(null)} />}
       {showThreads && newTaskFolderBot && <NewTaskFolderDialog bot={newTaskFolderBot} onClose={() => setNewTaskFolderBotId(null)} onReturnFocus={() => {
         sidebarRef.current?.querySelector<HTMLElement>(`[data-sidebar-bot-row="${CSS.escape(newTaskFolderBot.id)}"]`)?.focus();

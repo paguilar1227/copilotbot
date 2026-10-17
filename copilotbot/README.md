@@ -44,6 +44,14 @@ Choose **Azure Foundry** in the Live call settings or voice engine settings. Cha
 
 References: [Azure Realtime WebRTC](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/realtime-audio-webrtc), [Azure audio API](https://learn.microsoft.com/en-us/azure/foundry/openai/reference-preview), [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli).
 
+## Sidebar projects
+
+Use **+ → New project** on desktop or **+ → Projects** on iPhone to group teams and individual bots under a collapsible divider. The editor has searchable, scrollable member lists and selected counts. Each item belongs to one project; selecting it in another project moves it there. Team members follow their team, while pinned bots keep their shortcuts.
+
+Use the divider's pencil to rename it or change its members. Removing a project only ungroups its contents. Project membership and collapse state are saved in `copilotbot/projects.json` under the app data directory and synchronize across owner clients. Team renames preserve membership through stable team IDs. This layer is separate from the folders that organize a bot's conversation threads.
+
+Implementation is isolated in the downstream `workspace-projects` modules, with sidebar, route and event hooks. Validate with `pnpm exec vitest run server/copilotbot/workspace-projects.test.ts server/copilotbot/workspace-projects.e2e.test.ts src/copilotbot/WorkspaceProjects.test.ts`, and the iOS `CopilotBotTests` / `testProjectGroupsPinnedBotAndTeamsAndCollapses` tests.
+
 ## Updating from upstream
 
 Keep `upstream` pointing to `milind-soni/OpenMausBot` and `origin` pointing to this repository. Merge upstream history; do not rebase or squash the imported history.

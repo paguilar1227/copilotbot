@@ -12,6 +12,9 @@ import CompanionCore
 struct ChatListView: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var liveCall: LiveCallController
+    @State private var workspaceProjects = WorkspaceProjectCatalog()
+    @State private var showingProjects = false
+    @State private var projectPending = false
     @State private var query = ""
     @AppStorage(PrefKey.activityDetail) private var activityDetail = ActivityDetail.phoneDefault.rawValue
     @AppStorage(PrefKey.rosterDensity) private var rosterDensity = RosterDensity.default.rawValue
@@ -216,6 +219,15 @@ struct ChatListView: View {
             .sheet(isPresented: $showingNewBot) {
                 NewCopilotBotView { bot in path.append(Chat.bot(bot)) }
             }
+            .sheet(isPresented: $showingProjects) { NavigationStack { WorkspaceProjectsView(catalog: $workspaceProjects) } }
+            .task(id: projectReloadKey) {
+                guard session.canAdminister, let client = session.client else { workspaceProjects = WorkspaceProjectCatalog(); return }
+                do {
+                    let catalog = try await client.workspaceProjects()
+                    try Task.checkCancellation()
+                    workspaceProjects = catalog
+                } catch is CancellationError {} catch { session.actionError = error.localizedDescription }
+            }
             .sheet(isPresented: $showingNewSection) {
                 NewSectionSheet()
             }
@@ -351,7 +363,7 @@ struct ChatListView: View {
             }
         }
 
-        if let chief = session.state.unsectionedChief {
+        if let chief = session.state.unsectionedChief, !assignedProjectBots.contains(chief.id) {
             VStack(alignment: .leading, spacing: 0) {
                 botRows(summaries(for: [chief], from: allSummaries), waiting: waiting)
             }
@@ -393,7 +405,7 @@ struct ChatListView: View {
             }
         }
 
-        let unsectioned = summaries(for: session.state.unsectionedBots, from: allSummaries)
+        let unsectioned = summaries(for: session.state.unsectionedBots.filter { !assignedProjectBots.contains($0.id) }, from: allSummaries)
         if !unsectioned.isEmpty {
             sectionLabel(Text("Bots"))
                 .padding(.top, sectionSpacing)
@@ -401,7 +413,45 @@ struct ChatListView: View {
             botRows(unsectioned, waiting: waiting)
         }
 
-        ForEach(session.state.sidebarSections) { section in
+        ForEach(workspaceProjects.projects) { project in
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Button { collapse(project) } label: {
+                        HStack {
+                            Image(systemName: project.collapsed ? "chevron.right" : "chevron.down")
+                            Image(systemName: "folder")
+                            Text(project.name).fontWeight(.semibold).lineLimit(1)
+                            Spacer()
+                            Text("\(workspaceProjects.teamNames(for: project).count + session.state.bots.filter { $0.hidden != true && ($0.section ?? "").isEmpty && project.botIds.contains($0.id) }.count)").foregroundStyle(.secondary)
+                        }.font(.subheadline).padding(.vertical, 10).contentShape(Rectangle())
+                    }.buttonStyle(.plain).disabled(projectPending)
+                    .accessibilityLabel("\(project.collapsed ? "Expand" : "Collapse") project \(project.name)")
+                    Button { showingProjects = true } label: { Image(systemName: "pencil").padding(10) }.accessibilityLabel("Edit project \(project.name)")
+                }.padding(.horizontal, 16).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                if !project.collapsed {
+                    ForEach(workspaceProjects.sidebarTeams(for: project, bots: session.state.bots, rooms: session.state.rooms)) { section in
+                        projectTeamRows(section, allSummaries: allSummaries, waiting: waiting)
+                    }
+                    botRows(summaries(for: workspaceProjects.standaloneBots(for: project, bots: session.state.bots), from: allSummaries), waiting: waiting)
+                }
+            }.padding(.top, sectionSpacing)
+        }
+        ForEach(session.state.sidebarSections.filter { !assignedProjectTeams.contains($0.name) }) { section in
+            projectTeamRows(section, allSummaries: allSummaries, waiting: waiting)
+        }
+    }
+
+    private var assignedProjectBots: Set<String> { Set(workspaceProjects.projects.flatMap(\.botIds)) }
+    private var assignedProjectTeams: Set<String> { Set(workspaceProjects.projects.flatMap { workspaceProjects.teamNames(for: $0) }) }
+    private var projectReloadKey: String {
+        String(describing: session.status) + String(session.workspaceProjectRevision) + session.state.sidebarSections.map(\.name).joined(separator: "|") + session.state.bots.map { "\($0.id):\($0.section ?? ""):\($0.hidden)" }.joined(separator: "|")
+    }
+    private func collapse(_ project: WorkspaceProject) {
+        guard let client = session.client, !projectPending else { return }
+        projectPending = true
+        Task { do { workspaceProjects = try await client.collapseWorkspaceProject(project) } catch { session.actionError = error.localizedDescription }; projectPending = false }
+    }
+    private func projectTeamRows(_ section: SidebarSection, allSummaries: [ChatSummary], waiting: Set<String>) -> some View {
             VStack(alignment: .leading, spacing: 0) {
                 switch density {
                 case .comfortable:
@@ -427,7 +477,6 @@ struct ChatListView: View {
                 }
                 botRows(summaries(for: section.bots, from: allSummaries), waiting: waiting)
             }
-        }
     }
 
     /// Between one section and the next title.
@@ -718,6 +767,7 @@ struct ChatListView: View {
             // a chat-only phone is not shown buttons the server would refuse.
             if session.canAdminister {
                 Menu {
+                    Button("Projects", systemImage: "folder") { showingProjects = true }
                     Button("New section", systemImage: "folder.badge.plus", action: openNewSection)
                         .disabled(!hasVisibleBots)
                     Button("New bot", systemImage: "square.and.pencil", action: createBot)

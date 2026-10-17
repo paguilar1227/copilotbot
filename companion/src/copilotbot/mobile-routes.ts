@@ -2,6 +2,11 @@
  * Provider credentials, MCP installation and workspace configuration stay on
  * the computer. The route handlers retain their own admin checks. */
 export const mobileRoutes = [
+  { method: 'GET', path: /^\/api\/copilotbot\/projects$/ },
+  { method: 'POST', path: /^\/api\/copilotbot\/projects$/ },
+  { method: 'PUT', path: /^\/api\/copilotbot\/projects\/[\w-]+$/ },
+  { method: 'PATCH', path: /^\/api\/copilotbot\/projects\/[\w-]+$/ },
+  { method: 'DELETE', path: /^\/api\/copilotbot\/projects\/[\w-]+$/ },
   { method: 'PATCH', path: /^\/api\/copilotbot\/voice$/ },
   { method: 'POST', path: /^\/api\/instances\/(?:copilot|azure)\/auth\/(?:start|cancel)$/ },
   { method: 'GET', path: /^\/api\/instances\/(?:copilot|azure)\/auth\/status$/ },

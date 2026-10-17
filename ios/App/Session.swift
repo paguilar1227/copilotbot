@@ -62,6 +62,7 @@ final class Session: ObservableObject {
     /// Paired with a server directly rather than through the companion
     /// sidecar: see `Connection.pairedWithServer`.
     var pairedWithServer: Bool { connection?.pairedWithServer ?? false }
+    @Published private(set) var workspaceProjectRevision = 0
     @Published private(set) var status: Status = .unpaired
     /// Transient, user-facing failures from an action they just took.
     @Published var actionError: String?
@@ -1114,6 +1115,7 @@ final class Session: ObservableObject {
         updated.applyBatch(batch)
         state = updated
         for frame in batch {
+            if case let .unknown(kind) = frame.frame, ["workspace-projects", "sections"].contains(kind) { workspaceProjectRevision += 1 }
             if case let .runtime(event) = frame.frame,
                ["turn.completed", "runtime.error", "request.opened", "request.resolved", "item.completed"].contains(event.type) {
                 activityUpdates.send(event.threadId)

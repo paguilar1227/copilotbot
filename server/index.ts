@@ -334,6 +334,7 @@ import { azureRoutes } from "./copilotbot/azure-routes.ts";
 import { sectionMemoryKey } from "./section-context.ts";
 import { ResourcePolicies, configureResourceAccess, skillAllowed } from "./copilotbot/resource-access.ts";
 import { resourceRoutes } from "./copilotbot/resource-routes.ts";
+import { workspaceProjectRoutes } from "./copilotbot/workspace-projects.ts";
 import { rosterRoutes } from "./copilotbot/roster-routes.ts";
 import { BOT_TEMPLATE_HTTP_MAX_BYTES } from '../shared/template-avatar.ts';
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
@@ -14069,6 +14070,7 @@ ROUTES.push(resourceRoutes({ store, cfg, policies: resourcePolicies, sessionLive
   busy: bot => Boolean(bot.busy || activeGroupTurnForBot(bot.id)),
   routines: botId => routines?.listRoutines().filter(routine => routine.botId === botId) ?? [],
 }));
+ROUTES.push(workspaceProjectRoutes({ store, changed: () => broadcast({ kind: "workspace-projects" }, { adminOnly: true }), sessionLive: id => sessions.isLive(id) }));
 ROUTES.push(rosterRoutes({ store, policies: resourcePolicies, creation: botCreationDeps }));
 ROUTES.push(createLiveRoutes({
   calls: liveCalls,
