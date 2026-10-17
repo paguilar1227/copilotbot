@@ -17,7 +17,7 @@ export const PACKAGE_FORMAT = "openmaus.package";
 export const PACKAGE_VERSION = 2;
 /** Canonical UTF-8 bytes of the whole document. */
 export const PACKAGE_MAX_BYTES = 4 * 1024 * 1024;
-export const PACKAGE_MAX_SKILLS = 60, AGENT_MAX_SKILLS = 30, PACKAGE_MAX_PRESETS = 20, PACKAGE_MAX_CONNECTIONS = 20;
+export const PACKAGE_MAX_SKILLS = 60, AGENT_MAX_SKILLS = 30, PACKAGE_MAX_PRESETS = 20;
 /** Decoded picture bytes. */
 export const AVATAR_MAX_BYTES = 64 * 1024;
 export const SEED_FILE_MAX_BYTES = 256 * 1024, SEED_MAX_FILES = 100, SEED_MAX_BYTES = 1024 * 1024;
@@ -350,7 +350,7 @@ const agentSchema = z.object({
   approval: z.enum(["ask", "auto"], { error: "must be ask or auto" }).optional(), recordBrowserSteps: z.boolean().optional(),
   playbooks: z.array(key).max(40).optional(),
   skills: z.array(skillName).max(AGENT_MAX_SKILLS).optional(),
-  connections: z.array(connKey).max(PACKAGE_MAX_CONNECTIONS).optional(),
+  connections: z.array(connKey).optional(),
   seed: seedSchema.optional(),
 });
 
@@ -463,7 +463,7 @@ export const packageDocumentSchema = z.object({
       entries: z.array(portableSkillSchema).min(1).max(PACKAGE_MAX_SKILLS),
     }).optional(),
     presets: z.array(presetSchema).max(PACKAGE_MAX_PRESETS).optional(),
-    connections: z.array(connectionSchema).max(PACKAGE_MAX_CONNECTIONS).optional(),
+    connections: z.array(connectionSchema).optional(),
     examples: z.array(exampleSchema).max(12).optional(),
   }),
 });

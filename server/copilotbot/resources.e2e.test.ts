@@ -4,6 +4,34 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { launchVerificationServer, runControlOmb } from '../../scripts/control-omb.ts';
 
+it('imports, adds, selects and round-trips a large MCP catalog through bot and team APIs', async () => {
+  const fixture = await launchVerificationServer();
+  const api = async (method: string, path: string, body?: unknown, status = 200) => {
+    const response = await fetch(`${fixture.info.url}${path}`, { method, headers: { 'content-type': 'application/json', origin: fixture.info.url }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const data = await response.json() as any;
+    expect(response.status, JSON.stringify(data)).toBe(status);
+    return data;
+  };
+  try {
+    const entries = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`service-${i}`, { command: 'fixture' }]));
+    const imported = await api('POST', '/api/mcp/servers/import', { json: JSON.stringify({ mcpServers: entries }) }, 201);
+    expect(imported.added).toHaveLength(200);
+    await api('POST', '/api/mcp/servers', { name: 'extra', command: 'fixture' }, 201);
+    const names = [...Object.keys(entries), 'extra'];
+    const { bot } = await api('POST', '/api/bots', { name: 'Large catalog', section: 'Large team', settings: { mcpServers: names } }, 201);
+    await api('PATCH', `/api/bots/${bot.id}`, { mcpServers: names });
+    await api('PUT', '/api/copilotbot/resources?section=Large%20team', { skills: null, mcpServers: names });
+    const saved = await api('PUT', `/api/copilotbot/bots/${bot.id}/resources`, { skills: null, mcpServers: names });
+    expect(saved.policy.mcpServers).toEqual(names);
+    expect(saved.effective.mcpServers).toEqual(names);
+    expect(saved.catalog.mcpServers).toHaveLength(201);
+    const exported = await api('GET', `/api/copilotbot/bots/${bot.id}/template`);
+    const parsed = await api('POST', '/api/copilotbot/bot-template', { yaml: exported.yaml });
+    expect(parsed.defaults.profile.mcpServers).toEqual(names);
+    await api('PUT', `/api/copilotbot/bots/${bot.id}/resources`, { skills: null, mcpServers: [...names, 'agents'] }, 400);
+  } finally { await fixture.close(); }
+}, 90_000);
+
 it('enforces bot/team resources in dispatched turns and imports templates without starting work', async () => {
   const fixture = await launchVerificationServer();
   const api = async (method: string, path: string, body?: unknown, status = 200) => {

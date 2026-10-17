@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   addDisabledMcpServer,
   listMcpServers,
-  MAX_MCP_SERVERS,
   mcpServerNameError,
   parseMcpServerMutation,
   parseMcpServersImport,
@@ -149,21 +148,28 @@ describe("addDisabledMcpServer", () => {
     expect(current).toEqual(before);
   });
 
-  it("refuses a new server once the installation is already full", () => {
+  it("adds a server to a large installation without changing existing entries", () => {
     const current: Record<string, unknown> = {};
-    for (let i = 0; i < MAX_MCP_SERVERS; i++) current[`s${i}`] = { command: "x", args: [], env: {}, enabled: false };
+    for (let i = 0; i < 200; i++) current[`s${i}`] = { command: "x", args: [], env: {}, enabled: false };
     const before = structuredClone(current);
-    expect(addDisabledMcpServer(current, { name: "extra", command: "npx" })).toEqual({
-      ok: false,
-      status: 400,
-      error: `You can add at most ${MAX_MCP_SERVERS} MCP servers.`,
-    });
+    const result = addDisabledMcpServer(current, { name: "extra", command: "npx" });
+    expect(result).toMatchObject({ ok: true, server: { enabled: false } });
+    if (result.ok) expect(Object.keys(result.next)).toHaveLength(201);
     expect(addDisabledMcpServer(current, { name: "s0", command: "new" })).toMatchObject({ ok: false, status: 409 });
     expect(current).toEqual(before);
   });
 });
 
 describe("parseMcpServersImport", () => {
+  it("imports a large catalog while keeping every server disabled", () => {
+    const entries = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`service-${i}`, { command: "fixture", enabled: true }]));
+    const result = parseMcpServersImport(JSON.stringify({ mcpServers: entries }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(Object.keys(result.servers)).toHaveLength(200);
+    expect(Object.values(result.servers).every(server => server.enabled === false)).toBe(true);
+  });
+
   it("reads the standard mcpServers block, disabled until explicitly enabled", () => {
     const result = parseMcpServersImport(JSON.stringify({
       mcpServers: {

@@ -19,7 +19,7 @@ config.productName = 'CopilotBot';
 config.artifactName = 'CopilotBot-${version}-${arch}.${ext}';
 config.publish = null;
 config.extraMetadata = {
-  name: 'copilotbot', productName: 'CopilotBot', version: `${upstreamPackage.version}-copilotbot.5`,
+  name: 'copilotbot', productName: 'CopilotBot', version: `${upstreamPackage.version}-copilotbot.6`,
   homepage: 'https://github.com/paguilar1227/copilotbot',
   repository: { type: 'git', url: 'https://github.com/paguilar1227/copilotbot.git' },
 };

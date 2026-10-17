@@ -39,7 +39,7 @@ export const botDefaultsProfileSchema = profilePatchSchema.extend({
   composio: z.boolean().optional(),
   browser: z.boolean().optional(),
   browserProfile: z.string().max(100).nullable().optional(),
-  mcpServers: strings(100, 100).nullable().optional(),
+  mcpServers: z.array(z.string().max(100)).nullable().optional(),
   skillAccess: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64)).nullable().optional(),
   voiceNotes: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),

@@ -1,14 +1,14 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
-import { MAX_MCP_SERVERS, mcpServerNameError } from '../mcp-registry.ts';
+import { mcpServerNameError } from '../mcp-registry.ts';
 import { writeFileAtomic } from '../atomic.ts';
 import type { BotRecord } from '../store.ts';
 
 export const resourceNamesSchema = z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64)).nullable();
 export const resourceAccessSchema = z.object({
   skills: resourceNamesSchema.default(null),
-  mcpServers: z.array(z.string().refine(name => mcpServerNameError(name) === null, 'Invalid MCP server name')).max(MAX_MCP_SERVERS).nullable().default(null),
+  mcpServers: z.array(z.string().refine(name => mcpServerNameError(name) === null, 'Invalid MCP server name')).nullable().default(null),
 }).strict();
 export type ResourceAccess = z.infer<typeof resourceAccessSchema>;
 const policiesSchema = z.object({ version: z.literal(1), teams: z.record(z.string(), resourceAccessSchema) }).strict();

@@ -3,7 +3,7 @@ import type { AppConfig } from "../config.ts";
 import { hostedWorkspaceConfiguration } from "../enterprise.ts";
 import { McpOAuthError, McpSignInError, mcpCallbackOrigin, withMcpSignIn, type McpOAuthManager } from "../mcp-oauth.ts";
 import { probeMcpServer } from "../mcp-probe.ts";
-import { MAX_MCP_SERVERS, isRemoteMcpServer, parseMcpServerMutation, parseMcpServersImport, parseStoredMcpServer } from "../mcp-registry.ts";
+import { isRemoteMcpServer, parseMcpServerMutation, parseMcpServersImport, parseStoredMcpServer } from "../mcp-registry.ts";
 import { isLoopbackHost, isProxied, provesSameOrigin, requestOrigin } from "../request-auth.ts";
 import type { SessionRegistry } from "../sessions.ts";
 import type { BusyFlag } from "./config.ts";
@@ -132,9 +132,6 @@ export function createMcpServerRoutes(deps: McpServerRouteDeps): RouteHandler {
         const name = typeof body?.name === "string" ? body.name : "";
         const current = cfg.mcpServers ?? {};
         if (Object.hasOwn(current, name)) return json(res, 409, { error: "An MCP server with that name already exists." });
-        if (Object.keys(current).length >= MAX_MCP_SERVERS) {
-          return json(res, 400, { error: `You can add at most ${MAX_MCP_SERVERS} MCP servers.` });
-        }
         const parsed = parseMcpServerMutation(name, mcpServerBody(body));
         if (!parsed.ok) return json(res, 400, { error: parsed.error });
         const refusal = mcpPolicyRefusal(name, parsed.server);
@@ -167,9 +164,6 @@ export function createMcpServerRoutes(deps: McpServerRouteDeps): RouteHandler {
         const taken = names.filter((name) => Object.hasOwn(current, name));
         if (taken.length) {
           return json(res, 409, { error: `Already added: ${taken.join(", ")}. Remove or rename ${taken.length === 1 ? "it" : "them"} first.` });
-        }
-        if (Object.keys(current).length + names.length > MAX_MCP_SERVERS) {
-          return json(res, 400, { error: `You can add at most ${MAX_MCP_SERVERS} MCP servers.` });
         }
         const refused = names.filter(name => mcpPolicyRefusal(name, parsed.servers[name] as object));
         if (refused.length) return json(res, 403, { error: `${mcpPolicyRefusal(refused[0]!, parsed.servers[refused[0]!] as object)} Not approved: ${refused.join(", ")}.`, code: "managed_policy" });

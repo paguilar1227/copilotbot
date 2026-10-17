@@ -61,6 +61,20 @@ afterEach(async () => {
 });
 
 describe("importing a whole team", () => {
+  it("imports connections into an existing large MCP catalog", async () => {
+    const servers = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`service-${i}`, { command: "fixture", enabled: false }]));
+    const app = await installation({ servers });
+    const raw = fixture("full-team.v2.json");
+    raw.package.connections = Array.from({ length: 200 }, (_, i) => ({ ...raw.package.connections[0], key: `crm-${i}`, label: `CRM ${i}` }));
+    const connectionKeys = raw.package.connections.map((connection: { key: string }) => connection.key);
+    for (const agent of raw.package.agents) if (agent.connections) agent.connections = connectionKeys;
+    const result = app.importer.importPackageDocument(app.parsePackageDocument(raw), { trust: "file", mode: "add" }, app.deps);
+    if (result.alreadyAdded) throw new Error("unexpected");
+    expect(result.connections).toHaveLength(200);
+    expect(Object.keys(app.mcp.servers)).toHaveLength(400);
+    expect(app.mcp.servers['crm-199']).toMatchObject({ enabled: false });
+  });
+
   it("adds every part from a file: persona, picture, brief, Chief, rooms, paused routines, skills off, valueless connections, notes", async () => {
     const app = await installation({ servers: { crm: { type: "http", url: "https://existing.example.com", headers: { Authorization: "Bearer mine" }, enabled: true } } });
     const document: PackageDocument = app.parsePackageDocument(fixture("full-team.v2.json"));
