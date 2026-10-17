@@ -294,6 +294,7 @@ struct AgentProfileView: View {
                 NavigationLink("Team resources") { ResourceAccessView(team: current.section ?? "") }
                 NavigationLink("Learning") { LearningReviewView(botID: current.id) }
                 ExportBotTemplateButton(botID: current.id)
+                NavigationLink("Save to roster") { RosterView(sourceBotID: current.id) }
             }
             NavigationLink {
                 BotOverviewView(bot: current)

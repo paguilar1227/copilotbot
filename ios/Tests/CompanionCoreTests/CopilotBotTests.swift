@@ -2,6 +2,14 @@ import XCTest
 @testable import CompanionCore
 
 final class CopilotBotTests: XCTestCase {
+    func testRosterKeepsDependencyNamesAndPortableTeamReferences() throws {
+        let entry = try JSONDecoder().decode(RosterEntry.self, from: Data(#"{"id":"bot-template","kind":"bot","name":"Researcher","description":"Reviews evidence","revision":2,"memberCount":1,"usedBy":[{"id":"team-template","name":"Research"}],"activeCopies":0}"#.utf8))
+        XCTAssertEqual(entry.usedBy.first?.name, "Research")
+        XCTAssertEqual(entry.revision, 2)
+        let detail = try JSONDecoder().decode(RosterDetail.self, from: Data(#"{"revision":1,"definition":{"members":["bot-template"],"resources":{"skills":[],"mcpServers":null}}}"#.utf8))
+        XCTAssertEqual(detail.definition?.object["members"], .array([.string("bot-template")]))
+        XCTAssertEqual(detail.definition?.object["resources"]?.object["mcpServers"], .null)
+    }
     func testResourcePolicyDistinguishesAllFromNoneWithoutTruncatingCatalog() throws {
         let encoder = JSONEncoder()
         let all = try JSONSerialization.jsonObject(with: encoder.encode(ResourceAccess())) as! [String: Any]

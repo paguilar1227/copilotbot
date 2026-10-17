@@ -275,6 +275,11 @@ struct ChatListView: View {
                 .accessibilityLabel("Routine calendar")
                 .accessibilityIdentifier("open-calendar")
 
+                if session.canAdminister {
+                    NavigationLink { RosterView() } label: {
+                        Image(systemName: "books.vertical").frame(width: 44, height: 44)
+                    }.glassCapsule().accessibilityLabel("Saved roster")
+                }
                 NavigationLink { SettingsView() } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 18, weight: .medium))

@@ -29,6 +29,7 @@ import { SharePresetDialog } from "./SharePresetDialog";
 import { SettingRow } from "./SettingsPrimitives";
 import { Select } from "./Select";
 import { ResourceSettings } from "@/copilotbot/ResourceSettings";
+import { RosterDialog } from "@/copilotbot/RosterDialog";
 
 const SECTIONS = ["Identity", "Soul", "Skills & MCPs", "Memory", "Routines", "Access", "Model", "Permissions", "Voice & alerts"] as const;
 type Section = typeof SECTIONS[number];
@@ -80,6 +81,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
   const [ready, setReady] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [imported, setImported] = useState("");
+  const [rosterOpen, setRosterOpen] = useState(false);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [imports, setImports] = useState<Array<BotTemplatePreview & { created?: string }>>([]);
   const [importId, setImportId] = useState<string>();
@@ -271,6 +273,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
           <span className="text-[13px] font-medium text-ink">Create a new bot</span>
           <span className="text-[13px] text-ink-secondary">or</span>
           <button type="button" disabled={!ready || saving} onClick={() => fileInput.current?.click()} className="flex items-center gap-2 rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-40"><Upload size={14} />Import YAML files</button>
+          <button type="button" disabled={saving} onClick={() => setRosterOpen(true)} className="rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-40">Saved roster</button>
           <input ref={fileInput} type="file" multiple accept=".yaml,.yml,application/yaml,text/yaml" className="hidden" aria-label="Import bot YAML files" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void importTemplates(files); }} />
         </div>
         {imported && <p role="status" className="mt-2 text-[12px] text-ink-secondary">Loaded {imported}. Review the settings below, then create the bot.</p>}
@@ -340,6 +343,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
         </button>
       </div>
       <LocalComputerAutoWarning open={warning === "local"} onCancel={() => setWarning(null)} onConfirm={() => { draft.consent.acknowledgeLocalAuto = true; setWarning(null); void save(); }} />
+      {rosterOpen && <RosterDialog onClose={() => setRosterOpen(false)} />}
     </div>
   </div>;
 }

@@ -16,6 +16,7 @@ export interface ConfirmDialogProps {
   onCancel: () => void;
   onConfirm: () => void;
   pending?: boolean;
+  zIndex?: number;
   returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
@@ -73,6 +74,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6"
+      style={props.zIndex === undefined ? undefined : { zIndex: props.zIndex }}
       onMouseDown={(event) => event.target === event.currentTarget && onCancel()}
     >
       <ConfirmDialogCard ref={dialogRef} cancelRef={cancelRef} {...props} />

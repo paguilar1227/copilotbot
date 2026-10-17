@@ -35,6 +35,12 @@ export class ResourcePolicies {
     mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
     writeFileAtomic(this.file, JSON.stringify(data, null, 2), { mode: 0o600 });
   }
+  removeTeam(name: string): void {
+    const data = this.read();
+    if (!Object.hasOwn(data.teams, this.teamKey(name))) return;
+    delete data.teams[this.teamKey(name)];
+    writeFileAtomic(this.file, JSON.stringify(data, null, 2), { mode: 0o600 });
+  }
   effective(bot: Pick<BotRecord, 'section' | 'skillAccess' | 'mcpServers'>): ResourceAccess {
     const team = this.team(bot.section);
     return { skills: intersectResources(bot.skillAccess, team.skills), mcpServers: intersectResources(bot.mcpServers, team.mcpServers) };

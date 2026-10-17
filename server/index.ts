@@ -334,6 +334,7 @@ import { azureRoutes } from "./copilotbot/azure-routes.ts";
 import { sectionMemoryKey } from "./section-context.ts";
 import { ResourcePolicies, configureResourceAccess, skillAllowed } from "./copilotbot/resource-access.ts";
 import { resourceRoutes } from "./copilotbot/resource-routes.ts";
+import { rosterRoutes } from "./copilotbot/roster-routes.ts";
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
 import { ProPlan } from "./pro-plan.ts";
@@ -14067,6 +14068,7 @@ ROUTES.push(resourceRoutes({ store, cfg, policies: resourcePolicies, sessionLive
   busy: bot => Boolean(bot.busy || activeGroupTurnForBot(bot.id)),
   routines: botId => routines?.listRoutines().filter(routine => routine.botId === botId) ?? [],
 }));
+ROUTES.push(rosterRoutes({ store, policies: resourcePolicies, creation: botCreationDeps }));
 ROUTES.push(createLiveRoutes({
   calls: liveCalls,
   resolveTarget: (botId, threadId) => {

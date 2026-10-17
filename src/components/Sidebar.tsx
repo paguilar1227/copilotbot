@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { api, useStore, formatTime, visibleMessages, currentTaskBot, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type BotProject, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { approvalModeFor } from "../../shared/approval-mode";
+import { RosterDialog } from "@/copilotbot/RosterDialog";
 import { liveActivityLabel } from "@/lib/live-activity";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 
@@ -1682,6 +1683,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const [newTaskFolderBotId, setNewTaskFolderBotId] = useState<string | null>(null);
   const newTaskFolderBot = state.bots.find((bot) => bot.id === newTaskFolderBotId);
   const [teamLibraryOpen, setTeamLibraryOpen] = useState(false);
+  const [rosterSource, setRosterSource] = useState<string | null>(null);
   const [teamInstallUrl, setTeamInstallUrl] = useState<string | null>(null);
   const [archivedBotsOpen, setArchivedBotsOpen] = useState(false);
   const [teamFeedback, setTeamFeedback] = useState<{
@@ -2126,6 +2128,10 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
                   <FolderPlus size={16} className="text-ink-secondary" /> {t("team.create")}
                 </button>}
                 {!remoteClient && <>
+                <button type="button" onClick={() => { setPlusOpen(false); setRosterSource(''); }}
+                  className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[14px] text-ink hover:bg-raised/70">
+                  <Library size={16} className="text-ink-secondary" />Saved roster
+                </button>
                 <button
                   onClick={() => {
                     setPlusOpen(false);
@@ -2456,6 +2462,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
         }}
       />
       {newTeam && <TeamDialog onClose={() => setNewTeam(false)} />}
+      {rosterSource !== null && <RosterDialog initialSource={rosterSource} onClose={() => setRosterSource(null)} />}
       {renameTeam && <TeamDialog section={renameTeam} rename onRenamed={renamedTeam} onClose={() => setRenameTeam(null)} />}
       {teamMotion.shown && teamMotion.value && createPortal(<div className={cn("fixed inset-0 z-40", teamMotion.closing && "pointer-events-none")} onMouseDown={closeTeamMenu}>
         <div role="menu" aria-label={teamMotion.value.name} style={{ left: teamMotion.value.x, top: teamMotion.value.y }}
@@ -2471,6 +2478,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
             onDelete={() => { closeTeamMenu(); setDeletingTeam(teamMotion.value!.name); }}
             onSetForAll={teamSettingsAllowed === true ? () => { closeTeamMenu(); setTeamSettings(teamMotion.value!.name); } : undefined}
           />
+          {teamSettingsAllowed === true && <button type="button" role="menuitem" className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-raised" onClick={() => { const name = teamMotion.value!.name; closeTeamMenu(); setRosterSource(`team:${name}`); }}><Library size={15} />Save team to roster</button>}
         </div>
       </div>, document.body)}
       <ConfirmDialog open={deletingTeam !== null} title={t("team.deleteTitle", { name: deletingTeam ?? "" })}
