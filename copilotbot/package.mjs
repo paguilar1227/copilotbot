@@ -3,6 +3,7 @@ import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { build, Platform, Arch } from 'electron-builder';
+import { reusedDuckdbResource } from './package-resources.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const upstreamPackage = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
@@ -37,7 +38,7 @@ if (reuse) {
   config.extraResources = config.extraResources.filter(entry => !String(entry.from).includes('dist-native'));
   config.extraResources.push({ from: join(reuse, 'android-platform-tools'), to: 'android-platform-tools' });
   if (!existsSync(join(reuse, 'duckdb'))) { run('build:duckdb'); config.extraResources.push({ from: 'dist-native/duckdb/darwin-arm64/node_modules', to: 'duckdb/node_modules' }); }
-  else config.extraResources.push({ from: join(reuse, 'duckdb'), to: 'duckdb' });
+  else config.extraResources.push(reusedDuckdbResource(reuse));
   config.mac.extraResources = ['cua-driver', 'cua-sdk', 'OpenMausBot Speech.app'].map(directory => ({ from: join(reuse, directory), to: directory }));
   config.mac.extraResources.push({ from: 'dist-native/cloudflared/darwin-arm64/cloudflared', to: 'cloudflared/cloudflared' }, { from: 'dist-native/browser/darwin-arm64', to: 'browser-engine' });
 } else {
