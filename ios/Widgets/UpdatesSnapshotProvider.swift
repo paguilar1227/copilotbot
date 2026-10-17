@@ -133,7 +133,7 @@ enum WidgetChatLink {
     static func url(threadId: String) -> URL? {
         guard let encoded = threadId.addingPercentEncoding(withAllowedCharacters: unreserved) else { return nil }
         var components = URLComponents()
-        components.scheme = "openmausbot"
+        components.scheme = OpenMausSharedConfiguration.urlScheme
         components.host = "chat"
         components.path = "/" + encoded
         return components.url

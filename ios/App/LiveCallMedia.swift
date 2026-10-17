@@ -29,6 +29,7 @@ enum LiveCallMediaEvent: Equatable {
 /// What a call needs from the media layer.
 @MainActor
 protocol LiveCallMedia: AnyObject {
+    func configure(provider: String?)
     var events: AsyncStream<LiveCallMediaEvent> { get }
     /// Configure audio, add the microphone track, create the "oai-events"
     /// channel *before* the offer (so the offer carries the m=application
@@ -46,6 +47,9 @@ protocol LiveCallMedia: AnyObject {
     /// Tear the peer connection down and give the audio session back.
     func close()
 }
+
+@MainActor
+extension LiveCallMedia { func configure(provider: String?) {} }
 
 @MainActor
 final class WebRTCLiveCallMedia: NSObject, LiveCallMedia {
@@ -142,8 +146,11 @@ final class WebRTCLiveCallMedia: NSObject, LiveCallMedia {
         route(after: .setting)
     }
 
+    private var provider: String?
+    func configure(provider: String?) { self.provider = provider }
+
     func sendClose() {
-        guard let channel, channel.readyState == .open else { return }
+        guard provider != "azure", let channel, channel.readyState == .open else { return }
         _ = channel.sendData(RTCDataBuffer(data: LiveCallDataEvent.closeCommand, isBinary: false))
     }
 

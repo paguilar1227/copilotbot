@@ -1,3 +1,4 @@
+import { modelEffortLevels } from "../../../shared/model-effort";
 import { LearningPanel } from "@/copilotbot/LearningPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, FileText, Image as ImageIcon, Slack, Smartphone, X } from "lucide-react";
@@ -175,7 +176,7 @@ export function SimpleBotPanel({
   };
   const customMode = displayedApprovalMode === "edits" || displayedApprovalMode === "custom";
 
-  const effortLevels = engine?.capabilities?.modelVariants ? [] : engine?.capabilities?.effortLevels ?? [];
+  const effortLevels = engine?.capabilities?.modelVariants ? [] : modelEffortLevels(engine, bot.modelSelection.model);
   const thinkingLevels = effortLevels.length > 0 ? simpleEffortLevels(effortLevels, bot.modelSelection.effort) : [];
   const chooseEffort = (level: EffortLevel) => {
     if (bot.busy || level === bot.modelSelection.effort) return;

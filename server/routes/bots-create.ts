@@ -1,3 +1,4 @@
+import { listLibrarySkills, skillsLibraryEnabled } from "../skill-library.ts";
 import type { WireBot } from "../../shared/wire.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
 import { parseBotProfilePatch } from "../bot-profile.ts";
@@ -12,7 +13,7 @@ import { resolveBotCreationDefaults } from "../new-bot-defaults.ts";
 import { PRESET_UNAVAILABLE_MESSAGE, applyPresetToBot, presetOffered, type OrgInstallStatus, type PresetStore } from "../presets.ts";
 import { clientBotPatchViolation, type RequestAuth } from "../request-auth.ts";
 import type { RoutineManager } from "../routines.ts";
-import { installOrgSkill, installSkill, parseSkillMd, setSkillEnabled } from "../skills.ts";
+import { installOrgSkill, installSkill, parseSkillMd, setSkillEnabled, syncSkillLinks } from "../skills.ts";
 import type { BotRecord, Store } from "../store.ts";
 import { writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -138,12 +139,16 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
       const bot = store.createBot({ ...profile.patch, soul: settings.soul, section, modelSelection: selection,
         toolScope: settings.toolScope ?? undefined,
         ...(created?.ok ? { visibility: created.visibility } : {}) });
+      const availableLibrary = new Set(skillsLibraryEnabled(cfg) ? listLibrarySkills().map(skill => skill.name) : []);
+      const assignedLibrarySkills = template.librarySkills?.filter(name => availableLibrary.has(name));
+      const missingLibrarySkills = template.librarySkills?.filter(name => !availableLibrary.has(name)) ?? [];
       const createdRoutines: Array<{ id: string; enabled: boolean }> = [];
       try {
         const { chiefOfStaff: _chief, managedSections: _managed, toolScope: _toolScope, ...ordinary } = settings;
         store.patchBot(bot.id, {
           // Store creation completed the workspace defaults (effort included): the rest of the template must not undo them.
           ...ordinary, name: bot.name, section, modelSelection: bot.modelSelection,
+          ...(assignedLibrarySkills ? { assignedSkills: assignedLibrarySkills } : {}),
           mascotExpression: ordinary.mascotExpression ?? undefined,
           avatarUrl: ordinary.avatarUrl || undefined,
           computer: ordinary.computer ?? undefined, cwd: checkedCwd.cwd ?? undefined,
@@ -175,6 +180,7 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
             if ("error" in enabled) throw Object.assign(new Error(enabled.error), { status: 422 });
           }
         }
+        if (assignedLibrarySkills) syncSkillLinks(bot.id);
         // On a Cloud home only the owner's devices create bots: its routines are theirs.
         const ownersRoutines = CLOUD_OWNER_KEY && auth.kind === "session" && cloudOwnerSession(auth) ? CLOUD_OWNER_KEY : null;
         for (const routine of template.routines) {
@@ -188,7 +194,7 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
         throw error;
       }
       // Creation is complete: activation errors must not invite a duplicate retry or delete a bot whose routine may have run.
-      const warnings: string[] = [];
+      const warnings: string[] = missingLibrarySkills.length ? [`Skills not installed: ${missingLibrarySkills.join(", ")}. Add them from Skills & MCPs.`] : [];
       if (settings.chiefOfStaff) {
         try {
           store.patchBot(bot.id, { managedSections: settings.managedSections ?? [] });

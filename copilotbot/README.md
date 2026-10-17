@@ -63,3 +63,29 @@ Downstream implementation lives in `server/copilotbot/`, `src/copilotbot/`, `sha
 Check the hook files with `git diff upstream/main --stat`. Re-run the existing Live controller, credential storage, ACP authentication, and OpenAI chat regression suites when merging upstream changes to these areas. Run a separate read-only review and an isolated UI fixture before publishing. Tests use fake CLIs and fake audio; they do not prove a real microphone or access to a particular Azure deployment.
 
 The upstream Apache-2.0 license and NOTICE remain in place. The separately licensed `enterprise/` directory is preserved as upstream source; this project does not change its license checks or grant rights to redistribute or operate enterprise features.
+
+## Native iPhone companion
+
+`ios/` restores the last public Apache-2.0 companion snapshot at upstream commit `900ec19a61ecc10b3d34a7af07c9bf6b2bb66ac0` (before the upstream mobile-source removal). Its unmodified import is preserved in commit `1637d688b`. Keep that mobile baseline distinct from later upstream desktop merges. Upstream's hosted subscription and enterprise services are not part of this fork's entitlement.
+
+Generate the CopilotBot project from the unchanged upstream spec:
+
+```sh
+node ios/copilotbot-project.mjs
+xcodegen generate --spec ios/.copilotbot-project.yml
+open ios/OpenMausCompanion.xcodeproj
+```
+
+Select the `OpenMausCompanion` scheme. The generated app is **CopilotBot**, with bundle ID `com.copilotbot.app` and its own App Group/Keychain namespace. Choose your Apple development team for the app, Share extension and Widgets targets. Register the `group.com.copilotbot.shared` App Group. No signing identity, provisioning profile or provider key is committed. Device/TestFlight installation requires your signing setup; simulator builds can use `CODE_SIGNING_ALLOWED=NO` for offline previews.
+
+```sh
+swift test --package-path ios
+xcodebuild -project ios/OpenMausCompanion.xcodeproj -scheme OpenMausCompanion \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO build
+```
+
+On the phone: pair with the computer, then open **Settings → Provider sign-in** for Copilot or Azure Entra device-code login. The CLI must be installed on the computer. The bot's settings include model/effort, **Skills & MCPs**, **Team resources**, **Learning**, and YAML export. The new-bot button offers creation or YAML-file import, a settings review, and an explicit choice to enable imported schedules (off by default). Resource pickers use native scrolling lists, search, counts and persistent Save controls. Team limits continue to apply to current and future members.
+
+The phone button starts native WebRTC live voice using the OpenAI or Azure provider configured on the computer. Self-hosted calls use the owner's provider account without the upstream hosted Pro plan. Provider fees still apply. Azure API keys and Entra credentials stay on the computer. Microphone permission, captions, mute, hang-up, interruption and idle cleanup remain native. Configure deployments on the computer; choose the Live provider in call settings. A simulator preview or successful signaling exchange does not prove microphone/audio quality on a physical phone.
+
+Keep downstream views in `ios/App/CopilotBot/`, wire models in `ios/Sources/CompanionCore/CopilotBot.swift`, and project identity changes in `ios/copilotbot-project.mjs`. App/shared/client files contain narrow hooks. Companion route additions live in `companion/src/copilotbot/`; they do not expose general config writes, provider keys or MCP installation.

@@ -1,3 +1,4 @@
+import { mobileVoicePatch } from "../copilotbot/mobile.ts";
 import * as boat from "../boat.ts";
 import { boatCreateRecoverySnapshot, retireDeletedBoatCreate } from "../boat-create-idempotency.ts";
 import { boatDeletionSnapshot } from "../boat-delete-journal.ts";
@@ -108,8 +109,9 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
     if (method === "GET" && path === "/api/config") {
       return json(res, 200, configForAccess(configStatus(), auth.scopes.includes("admin")));
     }
-    if ((method === "PUT" || method === "PATCH") && path === "/api/config") {
-      const body = await readBody(req);
+    if (((method === "PUT" || method === "PATCH") && path === "/api/config") || (method === "PATCH" && path === "/api/copilotbot/voice")) {
+      const input = await readBody(req);
+      const body = path === "/api/copilotbot/voice" ? mobileVoicePatch(input) : input;
       if (hostedModels && ["instances", "azure", "anthropic", "openai", "openrouter", "openaiCompat", "xai", "mistral", "cerebras", "groq", "meta", "opencodeGo"].some(key => Object.hasOwn(body, key))) return json(res, 403, { error: HOSTED_PROVIDER_SETTINGS_ERROR });
       const patch = parseConfigPatch(body);
       if (CLOUD_HOME && (patch.signIn?.admins?.length || patch.signIn?.members?.length)) {

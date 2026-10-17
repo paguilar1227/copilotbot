@@ -1,3 +1,4 @@
+import { modelEffortLevels } from "../shared/model-effort.ts";
 // Import first: it reads a Cloud home's secrets off the launcher's pipe before any module can start a process.
 import { BOOT_CLOUD_SECRETS } from "./cloud-secrets-boot.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -628,6 +629,7 @@ import { createComputerRoutes } from "./routes/computers.ts";
 import { createStatusRoutes } from "./routes/status.ts";
 import { findAntigravityLeftovers, removeAntigravityLeftovers } from "./drivers/antigravity-temp.ts";
 import { createLiveRoutes } from "./routes/live.ts";
+import { selfHostedLiveAllowed } from "./copilotbot/mobile.ts";
 import { createNotificationRoutes } from "./routes/notifications.ts";
 import { createUsageRoutes } from "./routes/usage.ts";
 import { createBotMessageRoutes } from "./routes/bot-messages.ts";
@@ -2993,7 +2995,7 @@ function checkedModelSelection(
       };
     }
   }
-  const allowed: readonly string[] = target?.adapter.capabilities.effortLevels ?? [];
+  const allowed = modelEffortLevels(target ? { models: target.models, capabilities: target.adapter.capabilities } : undefined, selection.model);
   if (target && selection.effort !== undefined && !allowed.includes(selection.effort)) {
     return { ok: false, status: 400, error: `effort "${selection.effort}" is not offered by this bot's engine` };
   }
@@ -13981,6 +13983,7 @@ const liveCalls = new LiveCallController({
   },
   broadcast: (frame) => broadcast(frame, { adminOnly: true }),
   pro: () => proPlan.liveCallsAllowed(),
+  selfHosted: () => selfHostedLiveAllowed(cfg, Boolean(CLOUD_HOME)),
   settings: () => ({ key: cfg.live?.key ?? "", ...liveSettingsFor(cfg) }),
   createSession: ({ key, sdp, botId, threadId, voice }) => cfg.live?.provider === "azure"
     ? (cfg.azure?.liveDeployment ? createAzureGptLiveSession : createAzureLiveSession)({ config: { ...cfg.azure }, sdp, voice, bot: liveBotFor(botId), history: liveHistoryFor(threadId) })

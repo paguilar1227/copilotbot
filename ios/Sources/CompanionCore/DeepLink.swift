@@ -21,7 +21,7 @@ public enum CompanionDeepLink: Equatable, Sendable {
     /// are among those — they name things on the computer, not in this app.
     public static func parse(_ url: URL) -> CompanionDeepLink? {
         if let invite = PairingInvite.parse(url) { return .pairing(invite) }
-        guard url.scheme?.lowercased() == "openmausbot" else { return nil }
+        guard ["openmausbot", "copilotbot"].contains(url.scheme?.lowercased() ?? "") else { return nil }
         switch url.host?.lowercased() {
         case "pair": return .invalidPairing
         case "chat": return chat(url)

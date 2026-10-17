@@ -26,6 +26,9 @@ struct ChatListView: View {
     @State private var showingCalendar = false
     @State private var showingWalkie = false
     @State private var showingNewGroup = false
+    @State private var showingNewBot = false
+    @State private var previewResources = false
+    @State private var previewLearning = false
     @State private var showingNewSection = false
     @State private var expandedBots = Set<String>()
     @State private var collapsedFolders = Set<String>()
@@ -167,6 +170,8 @@ struct ChatListView: View {
             // Preview-only routes let the screenshot harness reach screens
             // that normally require a paired computer and a tap.
             .task {
+                if ProcessInfo.processInfo.arguments.contains("-open-learning") { previewLearning = true }
+                if ProcessInfo.processInfo.arguments.contains("-open-resources") { previewResources = true }
                 if ProcessInfo.processInfo.arguments.contains("-open-new-section") {
                     showingNewSection = true
                 }
@@ -201,6 +206,15 @@ struct ChatListView: View {
                     showingNewGroup = false
                     path.append(Chat.room(room))
                 }
+            }
+            .sheet(isPresented: $previewLearning) { NavigationStack { LearningReviewView(botID: "preview-pepper") } }
+            .sheet(isPresented: $previewResources) {
+                NavigationStack {
+                    ResourceAccessView(botID: ProcessInfo.processInfo.arguments.contains("-bot-resources") ? "preview-pepper" : nil)
+                }
+            }
+            .sheet(isPresented: $showingNewBot) {
+                NewCopilotBotView { bot in path.append(Chat.bot(bot)) }
             }
             .sheet(isPresented: $showingNewSection) {
                 NewSectionSheet()
@@ -765,12 +779,7 @@ struct ChatListView: View {
     }
 
     private func createBot() {
-        Task {
-            if let bot = await session.createBot() {
-                Haptics.success()
-                path.append(Chat.bot(bot))
-            }
-        }
+        showingNewBot = true
     }
 
     // MARK: - Data

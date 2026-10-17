@@ -28,6 +28,9 @@ struct TeamMemoryView: View {
 
     var body: some View {
         List {
+            if session.canAdminister {
+                Section { NavigationLink("Team skills & MCPs") { ResourceAccessView(team: section) } }
+            }
             if !proposed.isEmpty {
                 Section("Waiting for you") {
                     ForEach(proposed) { entry in

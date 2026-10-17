@@ -61,19 +61,21 @@ public struct LiveCallState: Codable, Hashable, Sendable {
 /// `PATCH /api/live/settings` report them. The key is not a field: it never
 /// crosses to a phone.
 public struct LiveSettings: Codable, Hashable, Sendable {
+    public var provider: String?
     public var configured: Bool
     public var voice: String
     public var readTypedReplies: Bool
     public var idleMinutes: Int
 
-    public init(configured: Bool, voice: String, readTypedReplies: Bool, idleMinutes: Int) {
+    public init(configured: Bool, voice: String, readTypedReplies: Bool, idleMinutes: Int, provider: String? = nil) {
+        self.provider = provider
         self.configured = configured
         self.voice = voice
         self.readTypedReplies = readTypedReplies
         self.idleMinutes = idleMinutes
     }
 
-    private enum CodingKeys: String, CodingKey { case configured, voice, readTypedReplies, idleMinutes }
+    private enum CodingKeys: String, CodingKey { case configured, voice, readTypedReplies, idleMinutes, provider }
 
     /// Tolerant on purpose: a Mac running today's harness sends only
     /// `{ configured, voice }`, and a strict decode here would fail the whole
@@ -84,6 +86,7 @@ public struct LiveSettings: Codable, Hashable, Sendable {
     /// way, or its picker would grow and select an empty row.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decodeIfPresent(String.self, forKey: .provider)
         configured = try container.decodeIfPresent(Bool.self, forKey: .configured) ?? false
         let voice = try container.decodeIfPresent(String.self, forKey: .voice) ?? ""
         self.voice = voice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? LiveVoices.defaultVoice : voice
@@ -95,11 +98,13 @@ public struct LiveSettings: Codable, Hashable, Sendable {
 /// `PATCH /api/live/settings`. `nil` means "leave it alone" and is omitted
 /// on the wire (synthesized `Encodable` uses `encodeIfPresent`).
 public struct LiveSettingsPatch: Encodable, Sendable {
+    public var provider: String?
     public var voice: String?
     public var readTypedReplies: Bool?
     public var idleMinutes: Int?
 
-    public init(voice: String? = nil, readTypedReplies: Bool? = nil, idleMinutes: Int? = nil) {
+    public init(voice: String? = nil, readTypedReplies: Bool? = nil, idleMinutes: Int? = nil, provider: String? = nil) {
+        self.provider = provider
         self.voice = voice
         self.readTypedReplies = readTypedReplies
         self.idleMinutes = idleMinutes
@@ -112,6 +117,7 @@ public struct LiveCallStart: Decodable, Sendable {
     public struct Transport: Decodable, Sendable {
         public var type: String
         public var sdp: String
+        public var provider: String?
     }
 
     public var call: LiveCallState

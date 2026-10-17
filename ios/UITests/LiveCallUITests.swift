@@ -48,7 +48,7 @@ final class LiveCallUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Managed on your computer"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Read replies to typed messages"].exists)
         // What a call sends to OpenAI, and what the typed-replies switch keeps out.
-        XCTAssertTrue(Self.text(Self.disclosure, in: app).exists, "the sheet says what a call sends to OpenAI")
+        XCTAssertTrue(Self.text(Self.settingsDisclosure, in: app).exists, "the sheet says what a call sends to OpenAI")
         XCTAssertTrue(app.staticTexts[Self.typedRepliesOff].exists, "the switch says what off keeps from OpenAI")
         record("Live call settings", app)
         app.buttons["Done"].tap()
@@ -447,8 +447,9 @@ final class LiveCallUITests: XCTestCase {
 
     /// The settings sheet's words on what reaches OpenAI (the shared
     /// disclosure, and the typed-replies switch's description).
-    private static let disclosure = "A Live call sends your voice to OpenAI, along with the chat's recent messages, the bot's answers and the details of any approval it asks for. The OpenAI key stays on your computer."
-    private static let typedRepliesOff = "When this is off, messages you type during a call and the bot's answers to them are not sent to OpenAI."
+    private static let settingsDisclosure = "A Live call sends your voice, recent messages, bot answers and approval details to the provider selected above. API keys and Entra ID credentials stay on your computer."
+    private static let disclosure = "A Live call sends your voice, recent messages, bot answers and approval details to the voice provider configured on your computer. API keys and Entra ID credentials stay on your computer."
+    private static let typedRepliesOff = "When this is off, messages you type during a call and the bot's answers to them are not sent to the voice provider."
     /// Pepper's name under `-live-call-long-name-preview`: 40 characters.
     private static let longName = "Pepper, the Quarterly Planning Assistant"
     /// The newest message in Pepper's Gmail thread (the preview's).

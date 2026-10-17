@@ -94,7 +94,9 @@ struct AgentProfileView: View {
     }
     private var effortLevels: [String] {
         var seen = Set<String>()
-        return (selectedInstance?.capabilities?.effortLevels ?? []).filter {
+        let levels = selectedInstance?.capabilities?.effortLevels ?? []
+        let variants = selectedInstance?.models.options.first { $0.id == selectedModelID }?.variants
+        return levels.filter { level in variants == nil || variants!.contains { $0.id == level } }.filter {
             !$0.isEmpty && seen.insert($0).inserted
         }
     }
@@ -205,6 +207,9 @@ struct AgentProfileView: View {
             }
         }
         .disabled(selectedInstance?.snapshot.isAvailable != true)
+        .onValueChange(of: selectedModelID) { _ in
+            if let selectedEffort, !effortLevels.contains(selectedEffort) { self.selectedEffort = nil }
+        }
 
         if !effortLevels.isEmpty {
             Picker("Reasoning effort", selection: $selectedEffort) {
@@ -284,6 +289,12 @@ struct AgentProfileView: View {
 
     private var identitySection: some View {
         Section("Identity") {
+            if session.canAdminister {
+                NavigationLink("Skills & MCPs") { ResourceAccessView(botID: current.id) }
+                NavigationLink("Team resources") { ResourceAccessView(team: current.section ?? "") }
+                NavigationLink("Learning") { LearningReviewView(botID: current.id) }
+                ExportBotTemplateButton(botID: current.id)
+            }
             NavigationLink {
                 BotOverviewView(bot: current)
             } label: {
@@ -317,6 +328,7 @@ struct AgentProfileView: View {
                     .tag(VoiceProvider.system)
                     .disabled(!hostIsMac)
                 Text("Chatterbox (local)").tag(VoiceProvider.chatterbox)
+                Text("Azure Foundry").tag(VoiceProvider.azure)
             }
             .disabled(switchingEngine)
 
@@ -331,7 +343,7 @@ struct AgentProfileView: View {
                     .foregroundStyle(.secondary)
             } else if !usesChatterbox {
                 Label(
-                    usesFishAudio ? "Fish Audio is not configured" : "ElevenLabs is not configured",
+                    engine == .azure ? "Azure Foundry is not configured" : usesFishAudio ? "Fish Audio is not configured" : "ElevenLabs is not configured",
                     systemImage: "speaker.slash"
                 )
                     .foregroundStyle(.secondary)
@@ -413,7 +425,9 @@ struct AgentProfileView: View {
             // cannot be a key. `providerConfigured` in
             // `server/tts/index.ts` is reporting that this
             // computer has no built-in voices to speak with.
-            if usesSystemVoices {
+            if engine == .azure {
+                Text("Configure Azure Foundry on your computer using Entra ID or an API key. Credentials stay on the computer.")
+            } else if usesSystemVoices {
                 Text("Built-in Mac voices need no key, and this computer has none available. Switch the voice engine above to ElevenLabs to keep using voice.")
             } else if usesChatterbox {
                 Text("Any OpenAI-compatible server running Chatterbox works, no key needed. Save its address and model id above.")
@@ -423,7 +437,9 @@ struct AgentProfileView: View {
                 Text("Add the shared ElevenLabs key in this agent's profile on the computer. The key is never returned to iOS.")
             }
         } else if !hasWorkspaceDefaultVoice {
-            if usesSystemVoices {
+            if engine == .azure {
+                Text("Choose an Azure Foundry voice. Synthesis uses the deployment and Entra ID or API key configured on your computer.")
+            } else if usesSystemVoices {
                 Text("No workspace default voice is selected. Choose an agent-specific voice above; synthesis still uses the built-in Mac voices on your computer.")
             } else if usesChatterbox {
                 Text("No workspace default voice is selected. Choose an agent-specific voice above; synthesis still uses the Chatterbox server on your computer.")

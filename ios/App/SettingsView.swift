@@ -19,6 +19,9 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            if session.canAdminister {
+                Section("CopilotBot") { NavigationLink("Provider sign-in") { ProviderSetupView() } }
+            }
             Section("Computer") {
                 if let connection = session.connection {
                     NavigationLink {
@@ -62,7 +65,7 @@ struct SettingsView: View {
                     .accessibilityHint(notificationAccessibilityHint)
                 }
             } footer: {
-                Text("Alerts arrive while OpenMausBot is open or was recently in the background. Closed-app delivery is not available yet.")
+                Text("Alerts arrive while CopilotBot is open or was recently in the background. Closed-app delivery is not available yet.")
             }
 
             Section {
@@ -493,7 +496,7 @@ struct ConnectionSecurityView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the connection from this device only. It does not revoke this device on your Mac. To remove Mac-side access, open OpenMausBot → Settings → Phone and remove it there.")
+            Text("This removes the connection from this device only. It does not revoke this device on your Mac. To remove Mac-side access, open CopilotBot → Settings → Phone and remove it there.")
         }
     }
 
@@ -504,7 +507,7 @@ struct ConnectionSecurityView: View {
         case .live:
             return Text("This computer is connected and responding normally.")
         case .connecting:
-            return Text("OpenMausBot is trying the saved connection automatically.")
+            return Text("CopilotBot is trying the saved connection automatically.")
         case let .offline(reason):
             return Text(verbatim: reason)
         case .unauthorized:

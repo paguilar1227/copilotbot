@@ -390,7 +390,7 @@ struct ChatView: View {
         // settings sheet's sentence). Start call remembers it on this phone;
         // Cancel starts nothing and leaves it for the next try.
         .alert(
-            Text("A Live call sends your voice to OpenAI, along with the chat's recent messages, the bot's answers and the details of any approval it asks for. The OpenAI key stays on your computer."),
+            Text("A Live call sends your voice, recent messages, bot answers and approval details to the voice provider configured on your computer. API keys and Entra ID credentials stay on your computer."),
             isPresented: Binding(
                 get: { disclosingLiveCall != nil },
                 set: { if !$0 { disclosingLiveCall = nil } }
@@ -429,7 +429,15 @@ struct ChatView: View {
         // Reading scrollback — one tap back to the end, streaming or
         // not, the same pill the desktop chat offers.
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { bottom in
+            let shrinking = viewportBottom > 0 && bottom < viewportBottom
             viewportBottom = bottom
+            if shrinking && !readerDetached {
+                Task { @MainActor in
+                    await Task.yield()
+                    guard !readerDetached else { return }
+                    proxy.scrollTo(Self.transcriptEndId, anchor: .bottom)
+                }
+            }
         }
         .overlay(alignment: .bottom) { jumpToLatestPill(proxy) }
         .task { await playIslandIntro() }

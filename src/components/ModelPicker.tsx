@@ -1,3 +1,4 @@
+import { modelEffortLevels } from "../../shared/model-effort";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, KeyRound, Loader2, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useStore, currentTaskBot, type Bot, type InstanceInfo, type ModelSelection } from "@/state/store";
@@ -92,7 +93,7 @@ export function EffortRow({
   if (instance?.capabilities?.modelVariants) {
     return <ModelVariantRow bot={bot} threadId={threadId} updateBotDefault={updateBotDefault} className={className} label={label} compact={compact} />;
   }
-  const levels = instance?.capabilities?.effortLevels;
+  const levels = modelEffortLevels(instance, selection.model);
   if (!levels?.length) return null;
 
   if (compact) return (
@@ -228,7 +229,7 @@ export function modelSelectionForPick(selection: ModelSelection, instance: Insta
   if (instance.instanceId === selection.instanceId) {
     if (instance.capabilities?.modelVariants) {
       if (model === selection.model && selection.variant !== undefined) next.variant = selection.variant;
-    } else if (selection.effort) next.effort = selection.effort;
+    } else if (selection.effort && modelEffortLevels(instance, model).includes(selection.effort)) next.effort = selection.effort;
   }
   return next;
 }
@@ -735,7 +736,7 @@ export function ModelPicker({
     selectRail(instance);
     lookForLocalIn(instance);
   };
-  const activeLevels = active?.capabilities?.effortLevels ?? [];
+  const activeLevels = modelEffortLevels(active, selection.model);
   const simpleEffort = activeLevels.length > 0 ? {
     levels: simpleEffortLevels(activeLevels, selection.effort),
     current: selection.effort,

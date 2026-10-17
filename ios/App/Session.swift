@@ -94,7 +94,7 @@ final class Session: ObservableObject {
     /// NavigationStack the same way a notification response is.
     @Published private(set) var pendingChat: Chat?
 
-    private var client: CompanionClient?
+    private(set) var client: CompanionClient?
     /// Sent just before the phone stops talking to the active computer (a
     /// new pairing, a switch, forgetting it), while `client` and `state`
     /// still belong to it. A Live call hangs up here, so its end request
@@ -232,6 +232,11 @@ final class Session: ObservableObject {
                 connections = registry.connections
             } else {
                 connections = [preview]
+            }
+            if arguments.contains("-copilotbot-preview") {
+                let config = URLSessionConfiguration.ephemeral
+                config.protocolClasses = [CopilotBotPreviewProtocol.self]
+                client = CompanionClient(connection: preview, token: "copilotbot-fixture-token", session: URLSession(configuration: config))
             }
             if arguments.contains("-images-preview") {
                 let config = URLSessionConfiguration.ephemeral

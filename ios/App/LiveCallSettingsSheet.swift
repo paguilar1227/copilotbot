@@ -31,6 +31,14 @@ struct LiveCallSettingsSheet: View {
         NavigationStack {
             Form {
                 Section {
+                    Picker("Provider", selection: Binding(get: { settings?.provider ?? "openai" }, set: { value in
+                        settings?.provider = value
+                        save(LiveSettingsPatch(provider: value))
+                    })) {
+                        Text("OpenAI").tag("openai")
+                        Text("Azure Foundry").tag("azure")
+                    }
+                    .accessibilityIdentifier("live-provider")
                     Picker("Voice", selection: voice) {
                         ForEach(voiceOptions) { option in
                             Text(verbatim: option.label).tag(option.id)
@@ -56,7 +64,7 @@ struct LiveCallSettingsSheet: View {
                 Section {
                     Toggle("Read replies to typed messages", isOn: readTypedReplies)
                 } footer: {
-                    Text("When this is off, messages you type during a call and the bot's answers to them are not sent to OpenAI.")
+                    Text("When this is off, messages you type during a call and the bot's answers to them are not sent to the voice provider.")
                 }
 
                 Section {
@@ -76,7 +84,7 @@ struct LiveCallSettingsSheet: View {
                     // the value can no longer be found by its own words, which
                     // is how the UI test reads it.
                     HStack {
-                        Text("OpenAI key")
+                        Text("Provider credentials")
                         Spacer(minLength: 12)
                         Text("Managed on your computer")
                             .foregroundStyle(.secondary)
@@ -84,7 +92,7 @@ struct LiveCallSettingsSheet: View {
                             .accessibilityIdentifier("live-call-key")
                     }
                 } footer: {
-                    Text("A Live call sends your voice to OpenAI, along with the chat's recent messages, the bot's answers and the details of any approval it asks for. The OpenAI key stays on your computer.")
+                    Text("A Live call sends your voice, recent messages, bot answers and approval details to the provider selected above. API keys and Entra ID credentials stay on your computer.")
                 }
             }
             // On the Form, not the stack: an outer identifier replaces the

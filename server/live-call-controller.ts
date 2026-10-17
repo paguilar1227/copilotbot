@@ -48,6 +48,7 @@ export interface LiveCallDeps {
   activity(botId: string, threadId: string): LiveActivity;
   broadcast(frame: { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }): void;
   pro(): boolean;
+  selfHosted?(): boolean;
   settings(): { configured?: boolean; key: string; voice: string; readTypedReplies: boolean; idleMinutes: number };
   createSession(input: { key: string; sdp: string; botId: string; threadId: string; voice: string }): Promise<{ sessionId: string; sdp: string; openSocket?: () => LiveSocket }>;
   openSocket(url: string, key: string): LiveSocket;
@@ -160,7 +161,7 @@ export class LiveCallController {
   async start(input: { auth: RequestAuth; device?: string; botId: string; botName: string; threadId: string; client: LiveClient; sdp: string }): Promise<{ call: LiveCallState; sdp: string }> {
     if (this.call && this.call.state.status !== "ended") throw new LiveCallBusyError({ ...this.call.state });
     if (input.device && this.revokedDevices.has(input.device)) throw new LiveCallSignedOutError();
-    if (liveCallFromPhone(input) && !this.deps.pro()) throw new LiveCallNeedsProError();
+    if (liveCallFromPhone(input) && !this.deps.selfHosted?.() && !this.deps.pro()) throw new LiveCallNeedsProError();
     const settings = this.deps.settings();
     const key = settings.key.trim();
     if (!key && !settings.configured) throw new LiveSessionError("Add an OpenAI API key to use Live calls.", 409);

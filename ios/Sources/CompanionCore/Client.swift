@@ -240,7 +240,7 @@ public struct PairingInvite: Equatable, Sendable {
 
     public static func parse(_ url: URL) -> PairingInvite? {
         if let server = parseServerLink(url) { return server }
-        guard url.scheme?.lowercased() == "openmausbot",
+        guard ["openmausbot", "copilotbot"].contains(url.scheme?.lowercased() ?? ""),
               url.host?.lowercased() == "pair",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         else { return nil }
@@ -682,7 +682,7 @@ public struct CompanionClient: Sendable {
     /// Encodable request bodies are used for contracts where omitted and null
     /// have different meanings. JSONSerialization cannot preserve that type
     /// distinction without rebuilding the object by hand at every call site.
-    private func makeRequest<Body: Encodable>(
+    func makeRequest<Body: Encodable>(
         _ method: String,
         _ path: String,
         encodedBody body: Body
@@ -694,7 +694,7 @@ public struct CompanionClient: Sendable {
     }
 
     @discardableResult
-    private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+    func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
         let (data, response) = try await perform(request)
         try Self.check(response, data)
         do {
@@ -704,7 +704,7 @@ public struct CompanionClient: Sendable {
         }
     }
 
-    private func send(_ request: URLRequest) async throws {
+    func send(_ request: URLRequest) async throws {
         let (data, response) = try await perform(request)
         try Self.check(response, data)
     }
@@ -1213,7 +1213,7 @@ public struct CompanionClient: Sendable {
     /// selected engine needs appears beside it in settings.
     public func setVoiceProvider(_ provider: VoiceProvider) async throws -> ConfigStatus {
         try await send(
-            try makeRequest("PUT", "/api/config", body: ["tts": ["provider": provider.wireValue]]),
+            try makeRequest("PATCH", "/api/copilotbot/voice", body: ["provider": provider.wireValue]),
             as: ConfigStatus.self
         )
     }
@@ -1697,7 +1697,7 @@ public struct CompanionClient: Sendable {
         ).live
     }
 
-    private static func validRouteID(_ value: String) -> Bool {
+    static func validRouteID(_ value: String) -> Bool {
         !value.isEmpty && value.utf8.allSatisfy { byte in
             (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
                 || byte == 45 || byte == 95

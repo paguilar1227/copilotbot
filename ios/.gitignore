@@ -10,3 +10,5 @@ App/OpenMausCompanion.entitlements
 ShareExtension/Info.plist
 ShareExtension/OpenMausShareExtension.entitlements
 Widgets/OpenMausCompanionWidgets.entitlements
+.copilotbot-project.yml
+.copilotbot-build/

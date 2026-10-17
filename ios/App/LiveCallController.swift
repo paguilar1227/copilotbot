@@ -233,6 +233,7 @@ final class LiveCallController: ObservableObject {
                     dispatch(.started(start.call))
                     return
                 }
+                media.configure(provider: start.transport.provider)
                 try await media.accept(answer: start.transport.sdp)
                 try Task.checkCancellation()
                 media.setSpeaker(speakerOn)

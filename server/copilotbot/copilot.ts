@@ -75,7 +75,7 @@ export function copilotSupport(discover = discoverCopilot): AcpSupport & { prepa
     resolveTurnModel: nativeModel,
     async resolveModels(env, config) {
       const result = await load(env, config.cli, true);
-      return { default: result.catalog.default, options: result.catalog.options.map(({ id, label }) => ({ id, label })) };
+      return { default: result.catalog.default, options: result.catalog.options.map(({ id, label, variants }) => ({ id, label, variants })) };
     },
     async prepare(turn) {
       if (pending) await pending;

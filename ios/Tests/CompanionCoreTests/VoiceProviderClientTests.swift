@@ -73,12 +73,11 @@ final class VoiceProviderClientTests: XCTestCase {
 
         XCTAssertEqual(status.voiceProvider, .chatterbox)
         let request = try XCTUnwrap(VoiceProviderRequestStub.capturedRequest)
-        XCTAssertEqual(request.httpMethod, "PUT")
-        XCTAssertEqual(request.url?.path, "/api/config")
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(request.url?.path, "/api/copilotbot/voice")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer paired-token")
         let body = try XCTUnwrap(Self.jsonBody())
-        XCTAssertEqual(body.keys.sorted(), ["tts"])
-        let tts = try XCTUnwrap(body["tts"] as? [String: Any])
+        let tts = body
         // A provider is a setting, not a secret; the write must not carry
         // credentials it has no business touching.
         XCTAssertEqual(tts.keys.sorted(), ["provider"])
@@ -92,7 +91,7 @@ final class VoiceProviderClientTests: XCTestCase {
 
         XCTAssertEqual(status.voiceProvider, .fish)
         let body = try XCTUnwrap(Self.jsonBody())
-        let tts = try XCTUnwrap(body["tts"] as? [String: Any])
+        let tts = body
         XCTAssertEqual(tts.keys.sorted(), ["provider"])
         XCTAssertEqual(tts["provider"] as? String, "fish")
     }

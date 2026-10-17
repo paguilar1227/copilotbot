@@ -1,3 +1,5 @@
+import { mobileRoutes } from './copilotbot/mobile-routes.ts';
+
 // What a paired device may ask for. Default deny: a route the harness adds
 // later stays closed to phones until it is listed here.
 
@@ -80,6 +82,7 @@ export function isBrowserControlAccess(method: string, path: string): boolean {
 /** Every request the iOS app makes, and nothing else. Paths arrive undecoded
  * and are anchored at both ends, so an encoded traversal fails to match. */
 const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
+  ...mobileRoutes,
   // Configured-or-not booleans, never keys; the write side is refused below.
   { method: "GET", path: /^\/api\/config$/ },
   { method: "GET", path: /^\/api\/events$/ },

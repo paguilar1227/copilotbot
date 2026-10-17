@@ -102,6 +102,15 @@ describe("LiveCallController lifecycle", () => {
     expect(t.deps.createSession).not.toHaveBeenCalled();
   });
 
+  it("allows a phone on the fork's own local voice provider without a hosted plan", async () => {
+    const t = setup({ pro: () => false, selfHosted: () => true });
+    const result = await t.controller.start({ auth: owner, ...BOT, device: "phone-1", client: "ios", sdp: "offer-sdp" });
+    expect(result.call.client).toBe("ios");
+    expect(t.deps.createSession).toHaveBeenCalledTimes(1);
+    t.socket().open();
+    await t.controller.shutdown();
+  });
+
   it("refuses a phone's start without Pro, before the key and before OpenAI", async () => {
     const t = setup({ pro: () => false });
     t.settings.key = "";

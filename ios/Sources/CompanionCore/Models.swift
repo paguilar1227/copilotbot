@@ -1143,6 +1143,8 @@ public struct ProviderSnapshot: Codable, Hashable, Sendable {
 }
 
 public struct ModelOption: Codable, Hashable, Identifiable, Sendable {
+    public struct Variant: Codable, Hashable, Sendable { public var id: String; public var label: String }
+    public var variants: [Variant]? = nil
     public var id: String
     public var label: String
 }
@@ -1190,6 +1192,7 @@ public enum VoiceProvider: Hashable, Sendable {
     case fish
     case system
     case chatterbox
+    case azure
 
     /// The exact string the config write carries. The server matches
     /// spellings, not meanings, so neither does this.
@@ -1199,6 +1202,7 @@ public enum VoiceProvider: Hashable, Sendable {
         case .fish: "fish"
         case .system: "system"
         case .chatterbox: "chatterbox"
+        case .azure: "azure"
         }
     }
 }
@@ -1267,6 +1271,7 @@ public struct ConfigStatus: Codable, Sendable {
         case "fish": .fish
         case "system": .system
         case "chatterbox": .chatterbox
+        case "azure": .azure
         default: .elevenlabs
         }
     }

@@ -118,7 +118,7 @@ export function resolveBotCreationDefaults(saved: NewBotDefaults | undefined, bo
   if (body.useDefaults !== undefined && typeof body.useDefaults !== "boolean") {
     throw Object.assign(new Error("useDefaults must be true or false"), { status: 400 });
   }
-  const template = newBotDefaultsSchema.parse(body.useDefaults === false ? {} : saved ?? {});
+  const template = newBotDefaultsSchema.parse(body.template ?? (body.useDefaults === false ? {} : saved ?? {}));
   const checked = botDefaultsProfileSchema.safeParse(body.settings === undefined ? {} : body.settings);
   if (!checked.success) throw Object.assign(new Error(checked.error.message), { status: 400 });
   const explicit = checked.data;

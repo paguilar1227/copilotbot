@@ -157,11 +157,13 @@ public enum LiveCallDataEvent: Equatable, Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = object["type"] as? String else { return nil }
         switch type {
-        case "session.started":
+        case "session.started", "session.created":
             return .started
+        case "conversation.item.input_audio_transcription.completed":
+            return .inputTranscript(object["transcript"] as? String ?? "")
         case "session.input_transcript.delta":
             return .inputTranscript(object["delta"] as? String ?? "")
-        case "session.output_transcript.delta":
+        case "session.output_transcript.delta", "response.output_audio_transcript.delta", "response.audio_transcript.delta":
             return .outputTranscript(object["delta"] as? String ?? "")
         case "session.closed":
             return .closed(reason: object["reason"] as? String)
