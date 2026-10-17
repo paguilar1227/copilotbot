@@ -45,6 +45,18 @@ it('searches a large roster while preserving selections and reuses a failed depl
   expect(bodies[0].selections.map((item: { id: string }) => item.id)).toEqual(['id-0', 'id-199']);
   expect(document.body.textContent).toContain('Deployed 1 template');
 });
+it('renders the saved avatar image with its crop and shows member previews for teams', async () => {
+  const portrait = { name: 'Portrait', color: 'blue' as const, avatarUrl: '/api/attachments/portrait.png', avatarCrop: 'rounded' as const, avatarZoom: 2 };
+  const alpha = { ...entry('alpha', 'Portrait'), avatars: [portrait] };
+  const team = { ...entry('team', 'Research', 'team'), avatars: [portrait, { name: 'Star', color: 'purple' as const, mascotBody: 'star' as const }], memberCount: 2 };
+  mock.api.mockResolvedValue({ entries: [alpha, team] });
+  await render();
+  const images = document.querySelectorAll<HTMLImageElement>('img[src="/api/attachments/portrait.png"]');
+  expect(images).toHaveLength(2);
+  expect(images[0].loading).toBe('lazy');
+  expect(images[0].style.transform).toBe('scale(2)');
+  expect(document.querySelector('[aria-label="Research appearance"] svg')).not.toBeNull();
+});
 it('explains deletion blockers and removes deleted team members from peer and chat setup when edited', async () => {
   const alpha = entry('alpha', 'Alpha'), beta = entry('beta', 'Beta'), team = entry('team', 'Research', 'team');
   alpha.usedBy = [{ id: team.id, name: team.name }];

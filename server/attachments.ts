@@ -12,10 +12,11 @@ import {
 import { link, open, unlink } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { DATA_DIR } from "./config.ts";
+import { TEMPLATE_AVATAR_MAX_BYTES } from "../shared/template-avatar.ts";
 
 export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
 
-export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const IMAGE_MAX_BYTES = TEMPLATE_AVATAR_MAX_BYTES;
 
 /** Below Cloudflare's transport ceiling; a local inbox, not unbounded storage. */
 export const FILE_MAX_BYTES = 25 * 1024 * 1024;

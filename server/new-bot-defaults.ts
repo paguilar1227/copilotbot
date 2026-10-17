@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { templateAvatarSchema, BOT_TEMPLATE_METADATA_MAX_BYTES } from '../shared/template-avatar.ts';
 const resourceNamesSchema = z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64));
 import { profilePatchSchema, fitsOnOneLine } from "./bot-profile.ts";
 import { EFFORT_LEVELS } from "../shared/wire.ts";
@@ -99,6 +100,7 @@ export const botSkillTemplateSchema = z.object({
 }).strict();
 
 export const newBotDefaultsSchema = z.object({
+  avatar: templateAvatarSchema.optional(),
   profile: botDefaultsProfileSchema.default({}),
   memory: z.record(z.string().regex(/^(?:MEMORY\.md|memory\/[a-zA-Z0-9_-]+\.md)$/),
     z.string().refine(value => Buffer.byteLength(value, "utf8") <= 262_144, "Memory file exceeds 256 KiB"))
@@ -106,7 +108,7 @@ export const newBotDefaultsSchema = z.object({
   skills: z.array(botSkillTemplateSchema).max(100).default([]),
   routines: z.array(botRoutineTemplateSchema).max(100).default([]),
   librarySkills: resourceNamesSchema.optional(),
-}).strict().refine(value => Buffer.byteLength(JSON.stringify(value), "utf8") <= 900_000,
+}).strict().refine(value => Buffer.byteLength(JSON.stringify({ ...value, avatar: undefined }), "utf8") <= BOT_TEMPLATE_METADATA_MAX_BYTES,
   "Bot defaults must fit within 900 KB");
 
 export type NewBotDefaults = z.infer<typeof newBotDefaultsSchema>;

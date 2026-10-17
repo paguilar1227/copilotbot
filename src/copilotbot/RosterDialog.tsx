@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, Bot, ChevronLeft, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
+import { BookOpen, ChevronLeft, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api, useStore } from '@/state/store';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Select } from '@/components/Select';
+import { BotAvatar } from '@/components/Avatar';
+import { stateForBot } from '@/lib/mascot';
 import type { RosterDetail, RosterListing, RosterSummary, RosterDeployment, TeamTemplateDefinition } from '../../shared/roster';
 
 const field = 'w-full rounded-lg border border-hairline bg-inset px-3 py-2 text-[13px] text-ink';
@@ -160,7 +162,12 @@ export function RosterDialog({ onClose, initialSource = '' }: { onClose: () => v
           <div role="region" aria-label="Saved templates" tabIndex={0} className="max-h-[50vh] overflow-y-auto rounded-xl border border-hairline">
             {visible.map(entry => <div key={entry.id} className="flex items-start gap-3 border-b border-hairline/40 p-3 sm:p-4">
               <input type="checkbox" aria-label={`Deploy ${entry.name}`} checked={selected.has(entry.id)} disabled={pending} className="mt-2" onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(entry.id); else next.delete(entry.id); return next; })} />
-              {entry.kind === 'bot' ? <Bot size={19} className="mt-1 shrink-0 text-accent" /> : <Users size={19} className="mt-1 shrink-0 text-accent" />}
+              <div className={`flex shrink-0 items-center ${entry.kind === 'team' ? '-space-x-3' : ''}`} aria-label={`${entry.name} appearance`}>
+                {(entry.avatars?.length ? entry.avatars : [{ name: entry.name, color: 'green' as const }]).slice(0, entry.kind === 'team' ? 2 : 1).map((avatar, index) => <div key={`${entry.id}-${index}`} className="rounded-full bg-card ring-2 ring-card">
+                  <BotAvatar bot={avatar} state={stateForBot(avatar)} size={40} animated={false} trackPointer={false} lazy />
+                </div>)}
+                {entry.kind === 'team' && entry.memberCount > 2 && <span className="z-10 flex size-7 items-center justify-center rounded-full bg-control text-[10px] text-ink ring-2 ring-card">+{entry.memberCount - 2}</span>}
+              </div>
               <div className="min-w-0 flex-1 break-words"><h3 className="text-[14px] font-medium text-ink">{entry.name}</h3><p className="line-clamp-2 text-[12px] text-ink-secondary">{entry.description}</p>
                 <p className="mt-1 text-[12px] text-ink-secondary">{entry.kind === 'team' ? `${entry.memberCount} bots · ` : ''}{entry.activeCopies ? `${entry.activeCopies} deployed ${entry.activeCopies === 1 ? 'copy' : 'copies'}` : 'Not deployed'}</p>
                 {!!entry.usedBy.length && <p className="mt-1 text-[12px] text-ink-secondary">Used by {entry.usedBy.map(team => team.name).join(', ')}</p>}

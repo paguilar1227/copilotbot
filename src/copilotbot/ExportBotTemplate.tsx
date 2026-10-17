@@ -33,7 +33,7 @@ export function ExportBotTemplate({ botId }: { botId: string }) {
   return <div className="mb-4 rounded-xl bg-card p-4">
     <button type="button" disabled={saving} onClick={() => void saveToRoster()} className="mb-2 flex items-center gap-2 rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-50"><BookOpen size={15} />Save to roster</button>
     <button type="button" disabled={saving} onClick={() => void download()} className="flex items-center gap-2 rounded-lg bg-control px-3 py-2 text-[13px] text-ink disabled:opacity-50"><Download size={15} />Export YAML template</button>
-    <p className="mt-2 text-[12px] text-ink-secondary">Reusable settings, routines and resource names. Excludes credentials, chat history, learned memory and local avatar files.</p>
+    <p className="mt-2 text-[12px] text-ink-secondary">Reusable settings, appearance, avatar image, routines and resource names. Excludes credentials, chat history and learned memory.</p>
     {error && <p role="alert" className="mt-2 text-[13px] text-danger">{error}</p>}
     {saved && <p role="status" className="mt-2 text-[13px] text-success">Saved as a reusable bot template. <button type="button" onClick={() => setRosterOpen(true)} className="underline">Open roster</button></p>}
     {rosterOpen && <RosterDialog onClose={() => setRosterOpen(false)} />}

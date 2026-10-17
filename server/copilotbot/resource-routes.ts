@@ -12,6 +12,7 @@ import { inheritedResourceCatalog } from './inherited-resources.ts';
 import { workspaceDir } from '../workspace.ts';
 import type { ResourceRow } from '../../shared/bot-resources.ts';
 import { allMcpServers } from '../plugins/contributions.ts';
+import { BOT_TEMPLATE_HTTP_MAX_BYTES } from '../../shared/template-avatar.ts';
 
 function widens(previous: ResourceAccess, next: ResourceAccess): boolean {
   return (['skills', 'mcpServers'] as const).some(key => previous[key] !== null && (next[key] === null || next[key].some(name => !previous[key]!.includes(name))));
@@ -49,12 +50,12 @@ export function resourceRoutes(deps: {
     if (!auth.scopes.includes('admin')) return json(res, 403, { error: 'Managing templates and resources requires admin access.' });
     try {
       if (path === '/api/copilotbot/bot-template' && method === 'POST') {
-        const body = z.object({ yaml: z.string() }).strict().parse(await readBody(req));
+        const body = z.object({ yaml: z.string() }).strict().parse(await readBody(req, BOT_TEMPLATE_HTTP_MAX_BYTES));
         const parsed = parseBotTemplate(body.yaml);
         return json(res, 200, { defaults: parsed.defaults, warnings: warnings(parsed.template, await catalog([])) });
       }
       if (path === '/api/copilotbot/bot-templates' && method === 'POST') {
-        const body = z.object({ files: z.array(z.object({ filename: z.string().min(1), yaml: z.string() }).strict()).min(1) }).strict().parse(await readBody(req));
+        const body = z.object({ files: z.array(z.object({ filename: z.string().min(1), yaml: z.string() }).strict()).min(1) }).strict().parse(await readBody(req, BOT_TEMPLATE_HTTP_MAX_BYTES));
         const available = await catalog([]);
         return json(res, 200, { templates: previewBotTemplates(body.files, template => warnings(template, available)) });
       }

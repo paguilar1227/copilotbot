@@ -30,6 +30,7 @@ import { SettingRow } from "./SettingsPrimitives";
 import { Select } from "./Select";
 import { ResourceSettings } from "@/copilotbot/ResourceSettings";
 import { RosterDialog } from "@/copilotbot/RosterDialog";
+import { BOT_TEMPLATE_MAX_BYTES } from '../../shared/template-avatar';
 
 const SECTIONS = ["Identity", "Soul", "Skills & MCPs", "Memory", "Routines", "Access", "Model", "Permissions", "Voice & alerts"] as const;
 type Section = typeof SECTIONS[number];
@@ -99,7 +100,7 @@ export function LocalNewBotDialog({ defaultsMode = false, onClose, section, onCr
     const results: Array<BotTemplatePreview & { created?: string }> = [];
     for (const [index, file] of files.entries()) {
       try {
-        if (file.size > 900_000) throw new Error("Bot template must fit within 900 KB");
+        if (file.size > BOT_TEMPLATE_MAX_BYTES) throw new Error("Template exceeds the settings and avatar size limits");
         const result = await api<{ templates: BotTemplatePreview[] }>("/api/copilotbot/bot-templates", { method: "POST", body: JSON.stringify({ files: [{ filename: file.name, yaml: await file.text() }] }) });
         results.push(...result.templates.map(item => ({ ...item, id: `${index}:${item.document}`, ...(item.defaults ? { defaults: { ...item.defaults, routines: item.defaults.routines.map(routine => ({ ...routine, enabled: false })) } } : {}) })));
       } catch (cause) {

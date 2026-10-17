@@ -7,6 +7,13 @@ import { botAvatarUrlFromStoredPath } from "../../shared/bot-avatar";
 
 export async function preparedBotTemplate(draft: BotCreationDraft) {
   const template = draft.export();
+  if (template.avatar && !template.profile.avatarUrl) {
+    const bytes = Uint8Array.from(atob(template.avatar.data), character => character.charCodeAt(0));
+    const uploaded = await imageAttachmentFromFile(new File([bytes], 'template-avatar', { type: template.avatar.mime }));
+    const url = uploaded && botAvatarUrlFromStoredPath(uploaded.path);
+    if (!url) throw new Error('Could not store the template avatar');
+    template.profile.avatarUrl = url;
+  }
   if (template.profile.avatarUrl?.startsWith("blob:")) {
     if (!draft.avatarFile) throw new Error("Choose the avatar image again");
     const uploaded = await imageAttachmentFromFile(draft.avatarFile);

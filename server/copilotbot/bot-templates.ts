@@ -6,6 +6,8 @@ import type { BotRecord } from '../store.ts';
 import type { NewBotDefaults } from '../../shared/new-bot-defaults.ts';
 import { fitsOnOneLine } from '../bot-profile.ts';
 import { resourceAccessSchema, type ResourceAccess } from './resource-access.ts';
+import { templateAvatarSchema, BOT_TEMPLATE_MAX_BYTES } from '../../shared/template-avatar.ts';
+import { captureTemplateAvatar } from './template-avatar.ts';
 
 const templateProfile = botDefaultsProfileSchema.omit({ avatarUrl: true, peers: true, mcpServers: true, skillAccess: true });
 export const botTemplateSchema = z.object({
@@ -15,6 +17,7 @@ export const botTemplateSchema = z.object({
   skills: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64)).default([]),
   resources: resourceAccessSchema.default({ skills: null, mcpServers: null }),
   routines: z.array(botRoutineTemplateSchema.omit({ attachments: true })).max(100).default([]),
+  avatar: templateAvatarSchema.optional(),
 }).strict();
 export type BotTemplate = z.infer<typeof botTemplateSchema>;
 
@@ -49,12 +52,13 @@ function readDocument(document: Document, lines: LineCounter) {
   const defaults = newBotDefaultsSchema.parse({
     profile: { ...template.profile, skillAccess: template.resources.skills, mcpServers: template.resources.mcpServers },
     routines: template.routines, librarySkills: template.skills,
+    ...(template.avatar ? { avatar: template.avatar } : {}),
   });
   return { template, defaults };
 }
 
 export function parseBotTemplate(yaml: string): { template: BotTemplate; defaults: NewBotDefaults } {
-  if (Buffer.byteLength(yaml, 'utf8') > 900_000) throw new BotTemplateError([{ path: 'file', message: 'Bot template must fit within 900 KB' }]);
+  if (Buffer.byteLength(yaml, 'utf8') > BOT_TEMPLATE_MAX_BYTES) throw new BotTemplateError([{ path: 'file', message: 'Template exceeds the settings and avatar size limits' }]);
   const lines = new LineCounter();
   return readDocument(parseDocument(yaml, { uniqueKeys: true, lineCounter: lines }), lines);
 }
@@ -66,7 +70,7 @@ export function previewBotTemplates(sources: TemplateSource[], warnings: (templa
       id: `${fileIndex}:${document}`, filename: source.filename, document,
       diagnostics: error instanceof BotTemplateError ? error.diagnostics : [{ path: 'template', message: error instanceof Error ? error.message : String(error) }], warnings: [],
     });
-    if (Buffer.byteLength(source.yaml, 'utf8') > 900_000) return [failure(1, new Error('Bot template must fit within 900 KB'))];
+    if (Buffer.byteLength(source.yaml, 'utf8') > BOT_TEMPLATE_MAX_BYTES) return [failure(1, new Error('Template exceeds the settings and avatar size limits'))];
     const lines = new LineCounter();
     try {
       const documents = parseAllDocuments(source.yaml, { uniqueKeys: true, lineCounter: lines });
@@ -96,6 +100,6 @@ export function exportBotTemplate(bot: BotRecord, resources: ResourceAccess, rou
     return out;
   });
   return '# CopilotBot template. Review settings before creating a bot.\n' + stringify(botTemplateSchema.parse({
-    format: 'copilotbot/bot', version: 1, profile, skills, resources, routines: portableRoutines,
+    format: 'copilotbot/bot', version: 1, profile, skills, resources, routines: portableRoutines, avatar: captureTemplateAvatar(bot.avatarUrl),
   }));
 }

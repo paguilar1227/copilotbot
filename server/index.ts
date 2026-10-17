@@ -335,6 +335,7 @@ import { sectionMemoryKey } from "./section-context.ts";
 import { ResourcePolicies, configureResourceAccess, skillAllowed } from "./copilotbot/resource-access.ts";
 import { resourceRoutes } from "./copilotbot/resource-routes.ts";
 import { rosterRoutes } from "./copilotbot/roster-routes.ts";
+import { BOT_TEMPLATE_HTTP_MAX_BYTES } from '../shared/template-avatar.ts';
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
 import { ProPlan } from "./pro-plan.ts";
@@ -14558,7 +14559,7 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
         return json(res, 403, { error: "the internal capability belongs to a different conversation" });
       }
       const readInternalBody = async () => {
-        const body = await readBody(req);
+        const body = await readBody(req, path === '/api/internal/import-bot-templates' ? BOT_TEMPLATE_HTTP_MAX_BYTES : undefined);
         // Authorization at header time is not a lease: if the owning turn settled meanwhile, die before any side effect.
         if (!internalCapabilityIsActive(internalCapability)) {
           throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });

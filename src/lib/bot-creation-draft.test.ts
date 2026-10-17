@@ -3,6 +3,18 @@ import { BotCreationDraft, EMPTY_BOT_DEFAULTS } from "./bot-creation-draft";
 import { api } from "@/state/store";
 
 describe("isolated creation draft", () => {
+  it("retains an imported avatar until the user replaces or removes it", () => {
+    const avatar = { mime: "image/png" as const, data: "aW1hZ2U=" };
+    const draft = new BotCreationDraft({ ...EMPTY_BOT_DEFAULTS, avatar, profile: { name: "Portrait", avatarCrop: "circle" } }, vi.fn());
+    draft.patch({ name: "Renamed" });
+    expect(draft.export().avatar).toEqual(avatar);
+    draft.patch({ avatarUrl: "/api/attachments/replacement.png" });
+    expect(draft.export().avatar).toBeUndefined();
+    expect(draft.export().profile.avatarUrl).toBe("/api/attachments/replacement.png");
+    const removed = new BotCreationDraft({ ...EMPTY_BOT_DEFAULTS, avatar }, vi.fn());
+    removed.patch({ avatarUrl: undefined });
+    expect(removed.export().avatar).toBeUndefined();
+  });
   it("clears a selection without exposing a malformed null bot status", async () => {
     const draft = new BotCreationDraft({ ...EMPTY_BOT_DEFAULTS, profile: { toolScope: { allow: [] } } }, vi.fn());
     expect(draft.bot).toHaveProperty("toolScope", { allow: [] });

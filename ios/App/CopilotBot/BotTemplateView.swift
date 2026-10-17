@@ -87,7 +87,8 @@ struct NewCopilotBotView: View {
                             defer { if access { url.stopAccessingSecurityScopedResource() } }
                             do {
                                 let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
-                                guard bytes.count <= 900_000, let text = String(data: bytes, encoding: .utf8) else { throw APIError.transport("Choose UTF-8 YAML no larger than 900 KB.") }
+                                let templateLimit = 900_000 + ((AttachmentPolicy.maximumImageBytes + 2) / 3) * 4
+                                guard bytes.count <= templateLimit, let text = String(data: bytes, encoding: .utf8) else { throw APIError.transport("Choose UTF-8 YAML within the settings and avatar size limits.") }
                                 let batch = try await client.previewTemplates(filename: url.lastPathComponent, yaml: text)
                                 parsed += batch.templates.map { entry in var copy = entry; copy.id = "\(index):\(entry.document)"; return copy }
                             } catch { errors.append("\(url.lastPathComponent): \(error.localizedDescription)") }

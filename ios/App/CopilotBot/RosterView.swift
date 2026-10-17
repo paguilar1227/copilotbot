@@ -1,5 +1,6 @@
 import CompanionCore
 import SwiftUI
+import UIKit
 
 struct RosterView: View {
     var sourceBotID: String? = nil
@@ -30,7 +31,14 @@ struct RosterView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Toggle(isOn: Binding(get: { selected.contains(entry.id) }, set: { on in
                             if on { selected.insert(entry.id) } else { selected.remove(entry.id) }; requestID = UUID()
-                        })) { Label(entry.name, systemImage: entry.kind == "team" ? "person.3" : "person.crop.square") }
+                        })) {
+                            HStack {
+                                HStack(spacing: -12) {
+                                    ForEach(Array((entry.avatars ?? []).prefix(entry.kind == "team" ? 2 : 1).enumerated()), id: \.offset) { _, avatar in RosterAvatarView(avatar: avatar) }
+                                }
+                                Text(entry.name)
+                            }
+                        }
                         if !entry.description.isEmpty { Text(entry.description).font(.caption).foregroundStyle(.secondary) }
                         Text(entry.activeCopies > 0 ? "\(entry.activeCopies) deployed copies" : "Not deployed").font(.caption).foregroundStyle(.secondary)
                         if !entry.usedBy.isEmpty { Text("Used by " + entry.usedBy.map(\.name).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary) }
@@ -83,6 +91,47 @@ struct RosterView: View {
         busy = true; error = nil; notice = nil
         defer { busy = false }
         do { try await action(client); await load() } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct RosterAvatarView: View {
+    let avatar: RosterAvatar
+    @EnvironmentObject private var session: Session
+    @Environment(\.displayScale) private var scale
+    @State private var image: UIImage?
+    private let size: CGFloat = 40
+    private var crop: AvatarCrop { avatar.avatarCrop ?? .mascot }
+    private var mask: AnyShape {
+        switch crop {
+        case .circle: AnyShape(Circle())
+        case .rounded: AnyShape(RoundedRectangle(cornerRadius: size * 0.22))
+        default: AnyShape(Rectangle())
+        }
+    }
+    var body: some View {
+        Group {
+            if let image, crop != .mascot {
+                let fill = max(size / image.size.width, size / image.size.height)
+                let width = image.size.width * fill, height = image.size.height * fill
+                let x = avatar.avatarFocusX ?? 0.5, y = avatar.avatarFocusY ?? 0.5
+                Image(uiImage: image).resizable().frame(width: width, height: height)
+                    .offset(x: (0.5 - x) * (width - size), y: (0.5 - y) * (height - size))
+                    .frame(width: size, height: size)
+                    .scaleEffect(avatar.avatarZoom ?? 1, anchor: UnitPoint(x: x, y: y))
+                    .clipShape(mask)
+            } else {
+                MausAvatar(color: avatar.color, size: size, bodyId: avatar.mascotBody, state: .forProfile(name: avatar.name, title: avatar.title ?? "", description: avatar.description ?? "", expression: avatar.mascotExpression), animated: false)
+            }
+        }.frame(width: size, height: size)
+        .accessibilityLabel("\(avatar.name) avatar")
+        .task(id: "\(session.connection?.id ?? "")|\(avatar.avatarUrl ?? "")|\(crop.rawValue)") {
+            image = nil
+            let connection = session.connection?.id
+            guard crop != .mascot, let path = avatar.avatarUrl, let client = session.client, let data = try? await client.avatar(path: path) else { return }
+            let decoded = await AvatarImages.image(path: path, data: data, pixelSize: Int(size * scale))
+            guard !Task.isCancelled, session.connection?.id == connection else { return }
+            image = decoded
+        }
     }
 }
 

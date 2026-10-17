@@ -14,6 +14,9 @@ import { PASS, type RouteHandler } from '../routes/table.ts';
 import { exportBotTemplate, parseBotTemplate } from './bot-templates.ts';
 import { Roster, teamTemplateSchema } from './roster.ts';
 import type { ResourcePolicies } from './resource-access.ts';
+import { storeTemplateAvatar } from './template-avatar.ts';
+import { BOT_TEMPLATE_HTTP_MAX_BYTES } from '../../shared/template-avatar.ts';
+import type { RosterAvatar } from '../../shared/roster.ts';
 
 const failure = (message: string, status = 400) => Object.assign(new Error(message), { status });
 const selectionSchema = z.object({ kind: z.enum(['bot', 'team']), id: z.string().uuid() }).strict();
@@ -29,9 +32,14 @@ export function rosterRoutes(deps: { store: Store; policies: ResourcePolicies; c
     const data = roster.read();
     const active = (id: string) => { const bot = store.bot(id); return bot && !bot.hidden; };
     const count = (id: string) => data.deployments.filter(item => item.templateId === id ? item.botIds.some(active) : item.members?.[id] && active(item.members[id])).length;
+    const avatar = (bot: typeof data.bots[number]): RosterAvatar => ({
+      ...Object.fromEntries(['color', 'mascotBody', 'mascotExpression', 'avatarCrop', 'avatarZoom', 'avatarFocusX', 'avatarFocusY'].filter(key => Object.hasOwn(bot.template.profile, key)).map(key => [key, bot.template.profile[key as keyof typeof bot.template.profile]])),
+      name: bot.template.profile.name, title: bot.template.profile.title, description: bot.template.profile.description, color: bot.template.profile.color ?? 'green',
+      ...(bot.template.avatar ? { avatarUrl: storeTemplateAvatar(bot.template.avatar) } : {}),
+    });
     return [
-      ...data.bots.map(bot => ({ id: bot.id, kind: 'bot' as const, name: bot.template.profile.name, description: bot.template.profile.description ?? bot.template.profile.title ?? '', revision: bot.revision, memberCount: 1, usedBy: data.teams.filter(team => team.definition.members.includes(bot.id)).map(team => ({ id: team.id, name: team.definition.name })), activeCopies: count(bot.id) })),
-      ...data.teams.map(team => ({ id: team.id, kind: 'team' as const, name: team.definition.name, description: team.definition.description, revision: team.revision, memberCount: team.definition.members.length, usedBy: [], activeCopies: count(team.id) })),
+      ...data.bots.map(bot => ({ id: bot.id, kind: 'bot' as const, name: bot.template.profile.name, description: bot.template.profile.description ?? bot.template.profile.title ?? '', revision: bot.revision, memberCount: 1, usedBy: data.teams.filter(team => team.definition.members.includes(bot.id)).map(team => ({ id: team.id, name: team.definition.name })), activeCopies: count(bot.id), avatars: [avatar(bot)] })),
+      ...data.teams.map(team => ({ id: team.id, kind: 'team' as const, name: team.definition.name, description: team.definition.description, revision: team.revision, memberCount: team.definition.members.length, usedBy: [], activeCopies: count(team.id), avatars: team.definition.members.flatMap(id => { const bot = data.bots.find(bot => bot.id === id); return bot ? [avatar(bot)] : []; }) })),
     ];
   };
   return async ({ req, res, path, method, auth, json, readBody }) => {
@@ -40,7 +48,7 @@ export function rosterRoutes(deps: { store: Store; policies: ResourcePolicies; c
     try {
       if (path === '/api/copilotbot/roster' && method === 'GET') return json(res, 200, { entries: summaries() });
       if (path === '/api/copilotbot/roster/bots' && method === 'POST') {
-        const body = z.union([z.object({ botId: z.string().uuid() }).strict(), z.object({ yaml: z.string() }).strict()]).parse(await readBody(req));
+        const body = z.union([z.object({ botId: z.string().uuid() }).strict(), z.object({ yaml: z.string() }).strict()]).parse(await readBody(req, BOT_TEMPLATE_HTTP_MAX_BYTES));
         const source = 'botId' in body ? store.bot(body.botId) : undefined;
         if ('botId' in body && !source) throw failure('Bot no longer exists', 404);
         const saved = roster.saveBot(source ? captureBot(source) : parseBotTemplate((body as { yaml: string }).yaml).template, undefined, undefined, source?.id);
@@ -79,7 +87,7 @@ export function rosterRoutes(deps: { store: Store; policies: ResourcePolicies; c
         }
         if (method === 'PUT') {
           if (kind === 'bot') {
-            const body = z.object({ revision: z.number().int().positive(), yaml: z.string() }).strict().parse(await readBody(req));
+            const body = z.object({ revision: z.number().int().positive(), yaml: z.string() }).strict().parse(await readBody(req, BOT_TEMPLATE_HTTP_MAX_BYTES));
             roster.saveBot(parseBotTemplate(body.yaml).template, id, body.revision);
           } else {
             const body = z.object({ revision: z.number().int().positive(), definition: teamTemplateSchema }).strict().parse(await readBody(req));

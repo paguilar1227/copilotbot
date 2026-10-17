@@ -1,5 +1,18 @@
 import Foundation
 
+public struct RosterAvatar: Decodable, Sendable {
+    public var name: String
+    public var title: String?
+    public var description: String?
+    public var color: String
+    public var mascotBody: String?
+    public var mascotExpression: String?
+    public var avatarUrl: String?
+    public var avatarCrop: AvatarCrop?
+    public var avatarZoom: Double?
+    public var avatarFocusX: Double?
+    public var avatarFocusY: Double?
+}
 public struct RosterEntry: Decodable, Identifiable, Sendable {
     public struct Reference: Decodable, Sendable { public var id: String; public var name: String }
     public var id: String
@@ -10,6 +23,7 @@ public struct RosterEntry: Decodable, Identifiable, Sendable {
     public var memberCount: Int
     public var usedBy: [Reference]
     public var activeCopies: Int
+    public var avatars: [RosterAvatar]?
 }
 public struct RosterDetail: Decodable, Sendable {
     public var revision: Int

@@ -2,6 +2,14 @@ import XCTest
 @testable import CompanionCore
 
 final class CopilotBotTests: XCTestCase {
+    func testRosterDecodesCustomAndBuiltInAvatars() throws {
+        let entry = try JSONDecoder().decode(RosterEntry.self, from: Data(#"{"id":"team","kind":"team","name":"Design","description":"","revision":1,"memberCount":2,"usedBy":[],"activeCopies":0,"avatars":[{"name":"Portrait","color":"blue","avatarUrl":"/api/attachments/portrait.png","avatarCrop":"rounded","avatarZoom":2,"avatarFocusX":0.25,"avatarFocusY":0.75},{"name":"Star","color":"purple","mascotBody":"star","mascotExpression":"happy"}]}"#.utf8))
+        XCTAssertEqual(entry.avatars?.first?.avatarCrop, .rounded)
+        XCTAssertEqual(entry.avatars?.first?.avatarZoom, 2)
+        XCTAssertEqual(entry.avatars?.first?.avatarFocusX, 0.25)
+        XCTAssertEqual(entry.avatars?.last?.mascotBody, "star")
+        XCTAssertEqual(entry.avatars?.last?.mascotExpression, "happy")
+    }
     func testRosterKeepsDependencyNamesAndPortableTeamReferences() throws {
         let entry = try JSONDecoder().decode(RosterEntry.self, from: Data(#"{"id":"bot-template","kind":"bot","name":"Researcher","description":"Reviews evidence","revision":2,"memberCount":1,"usedBy":[{"id":"team-template","name":"Research"}],"activeCopies":0}"#.utf8))
         XCTAssertEqual(entry.usedBy.first?.name, "Research")

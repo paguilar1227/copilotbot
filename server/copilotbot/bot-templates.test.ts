@@ -7,7 +7,7 @@ const bot = { id: 'private-id', threadId: 'private-thread', name: 'Researcher', 
   computer: 'off', approvalMode: 'ask', voice: 'alloy', speakReplies: true, voiceNotes: false, replyStyle: 'conversational',
   memoryEnabled: false, memoryUpkeep: false, recordBrowserSteps: false, helperModel: false,
   approvalGrant: 'DO-NOT-EXPORT', connectorTools: { secret: { key: 'DO-NOT-EXPORT' } }, peers: ['private-bot'],
-  avatarUrl: '/api/attachments/private-image.png', assignedSkills: ['research'], createdAt: 123,
+  assignedSkills: ['research'], createdAt: 123,
 } as unknown as BotRecord;
 
 describe('portable YAML bot templates', () => {

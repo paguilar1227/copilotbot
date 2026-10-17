@@ -37,6 +37,17 @@ describe("configured bot creation", () => {
     expect(f.bodies[0]).toMatchObject({ visibility: "admins", useDefaults: false });
   });
 
+  it("uploads the portable avatar and applies its crop when creating an imported bot", async () => {
+    const f = fixture("ask");
+    f.draft.template.avatar = { mime: "image/png", data: "aW1hZ2U=" };
+    f.draft.patch({ avatarCrop: "rounded", avatarZoom: 2, avatarFocusX: 0.25, avatarFocusY: 0.75 });
+    const upload = vi.fn().mockResolvedValue(new Response(JSON.stringify({ path: "attachments/imported.png", mime: "image/png", bytes: 5 })));
+    vi.stubGlobal("fetch", upload);
+    const { bot } = await createConfiguredBot(f.draft, f.request, persistBotUpdate, f.approvals);
+    expect(upload).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/attachments\?uploadId=/), expect.objectContaining({ method: "POST", headers: { "content-type": "image/png" }, body: new Uint8Array([105, 109, 97, 103, 101]) }));
+    expect(bot).toMatchObject({ avatarUrl: "/api/attachments/imported.png", avatarCrop: "rounded", avatarZoom: 2, avatarFocusX: 0.25, avatarFocusY: 0.75 });
+  });
+
   it("applies tool restrictions atomically before a new bot is published", async () => {
     const f = fixture("ask");
     f.draft.patch({ toolScope: { allow: [], deny: ["mcp:mail:send"] } });

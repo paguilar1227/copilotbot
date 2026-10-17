@@ -1,6 +1,7 @@
 import type { WireBot } from "./wire.ts";
 import type { RoutineInput } from "./routines.ts";
 import type { ToolScope } from "./tool-scope.ts";
+import type { TemplateAvatar } from './template-avatar.ts';
 
 /** Data shared by the default template and an individual creation draft. */
 export type BotDefaultsProfile = Partial<Pick<WireBot,
@@ -34,6 +35,7 @@ export interface BotSkillTemplate {
   warnings: string[];
 }
 export interface NewBotDefaults {
+  avatar?: TemplateAvatar;
   profile: BotDefaultsProfile;
   memory: Record<string, string>;
   skills: BotSkillTemplate[];

@@ -1305,9 +1305,11 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
         // layers hold no expression until the first draw.
         if (p.paused) {
           e.last = now
-          const still = `${p.state}|${p.expression ?? ''}|${paintRef.current}`
+          const still = `${p.state}|${e.expression}|${paintRef.current}`
           if (e.pausedPaint !== still) {
             e.pausedPaint = still
+            e.morph = 1
+            e.velocity = 0
             draw(e, now, 0)
           }
           wake = setTimeout(() => {

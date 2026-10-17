@@ -177,6 +177,7 @@ function MausAvatarComponent(
 export const MausAvatar = memo(forwardRef(MausAvatarComponent));
 
 export type BotAvatarProps = Omit<MausAvatarProps, "color" | "gradient"> & {
+  lazy?: boolean;
   readable?: boolean;
   bot: {
     name?: string;
@@ -205,7 +206,7 @@ export function resolveBotAvatarOutcome(params: {
   return "flatImage";
 }
 
-export function BotAvatar({ bot, size = 44, label, readable = false, ...mascotProps }: BotAvatarProps) {
+export function BotAvatar({ bot, size = 44, label, readable = false, lazy = false, ...mascotProps }: BotAvatarProps) {
   const profile = botAvatarProfile(bot);
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -246,6 +247,7 @@ export function BotAvatar({ bot, size = 44, label, readable = false, ...mascotPr
         width={size}
         height={size}
         draggable={false}
+        loading={lazy ? 'lazy' : undefined}
         onError={() => setImageFailed(true)}
         className="block size-full max-w-none object-cover"
         style={{

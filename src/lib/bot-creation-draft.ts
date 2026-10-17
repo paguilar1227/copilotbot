@@ -41,6 +41,7 @@ export class BotCreationDraft {
   }
 
   patch(value: BotUpdatePatch & Partial<BotDefaultsProfile> & { acknowledgePeerScope?: boolean }) {
+    if (Object.hasOwn(value, 'avatarUrl')) delete this.template.avatar;
     const { acknowledgeLocalAuto, acknowledgePeerScope, applyToAllThreads: _all, keepThreadModels: _keep,
       autoApprove, ...profile } = value;
     if (acknowledgeLocalAuto !== undefined) this.consent.acknowledgeLocalAuto = acknowledgeLocalAuto;

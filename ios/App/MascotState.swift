@@ -28,7 +28,12 @@ extension MausState {
         if bot.unread { return .notifying }
         if last?.kind == .options { return .curious }
 
-        let profile = "\(bot.name) \(bot.title) \(bot.description)".lowercased()
+        return forProfile(name: bot.name, title: bot.title, description: bot.description)
+    }
+
+    static func forProfile(name: String, title: String = "", description: String = "", expression: String? = nil) -> MausState {
+        if let pinned = normalize(expression) { return pinned }
+        let profile = "\(name) \(title) \(description)".lowercased()
         let range = NSRange(profile.startIndex..., in: profile)
         for (pattern, state) in roleGuesses where pattern.firstMatch(in: profile, range: range) != nil {
             return state

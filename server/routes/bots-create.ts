@@ -17,6 +17,8 @@ import { installOrgSkill, installSkill, parseSkillMd, setSkillEnabled, syncSkill
 import type { BotRecord, Store } from "../store.ts";
 import { writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { storeTemplateAvatar } from '../copilotbot/template-avatar.ts';
+import { BOT_TEMPLATE_HTTP_MAX_BYTES } from '../../shared/template-avatar.ts';
 
 export type ModelSelectionCheck = { ok: true; selection: ModelSelection } | { ok: false; status: number; error: string };
 
@@ -79,7 +81,7 @@ export async function createBotFromBody(deps: BotCreateRouteDeps, input: any, au
   if (settings.computer === "local" && settings.approvalMode === "auto" && body.acknowledgeLocalAuto !== true) {
     return result(400, { error: "Auto mode on this computer requires confirming the warning first (acknowledgeLocalAuto)" });
   }
-  if (settings.avatarUrl && !storedAvatarExists(settings.avatarUrl)) {
+  if (settings.avatarUrl && !template.avatar && !storedAvatarExists(settings.avatarUrl)) {
     return result(400, { error: "avatarUrl must reference an existing stored image" });
   }
   if (settings.browserProfile && settings.browserProfile !== "guest" && !(cfg.browserProfiles ?? []).some(profile => profile.id === settings.browserProfile)) {
@@ -137,6 +139,7 @@ export async function createBotFromBody(deps: BotCreateRouteDeps, input: any, au
   const created = body.visibility === undefined ? null : parseVisibility(body.visibility);
   if (created && !created.ok) return result(400, { error: created.error });
   if (validateOnly) return result(200, {});
+  const avatarUrl = template.avatar ? storeTemplateAvatar(template.avatar) : settings.avatarUrl;
   const bot = store.createBot({ ...profile.patch, soul: settings.soul, section, modelSelection: selection,
     toolScope: settings.toolScope ?? undefined,
     ...(created?.ok ? { visibility: created.visibility } : {}) });
@@ -151,7 +154,7 @@ export async function createBotFromBody(deps: BotCreateRouteDeps, input: any, au
       ...ordinary, name: bot.name, section, modelSelection: bot.modelSelection,
       ...(assignedLibrarySkills ? { assignedSkills: assignedLibrarySkills } : {}),
       mascotExpression: ordinary.mascotExpression ?? undefined,
-      avatarUrl: ordinary.avatarUrl || undefined,
+      avatarUrl: avatarUrl || undefined,
       computer: ordinary.computer ?? undefined, cwd: checkedCwd.cwd ?? undefined,
       peers: ordinary.peers ?? undefined, mcpServers: ordinary.mcpServers ?? undefined, skillAccess: ordinary.skillAccess ?? undefined,
       browserProfile: ordinary.browserProfile || undefined,
@@ -221,7 +224,7 @@ export async function createBotFromBody(deps: BotCreateRouteDeps, input: any, au
 export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     if (method !== "POST" || path !== "/api/bots") return PASS;
-    const response = await createBotFromBody(deps, await readBody(req), auth);
+    const response = await createBotFromBody(deps, await readBody(req, BOT_TEMPLATE_HTTP_MAX_BYTES), auth);
     return json(res, response.status, response.body);
   };
 }

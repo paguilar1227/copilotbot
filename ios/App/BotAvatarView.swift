@@ -110,7 +110,7 @@ struct BotAvatarView: View {
 /// 48 MB decoded — to fill 26 to 112 points. Stills are now thumbnailed to
 /// the face's pixel size and kept, keyed by the attachment path, its byte
 /// count and that size, in a cache bounded by count and decoded bytes.
-private enum AvatarImages {
+enum AvatarImages {
     private struct Decoded: @unchecked Sendable {
         let image: UIImage
         let cost: Int
