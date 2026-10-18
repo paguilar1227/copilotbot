@@ -97,7 +97,26 @@ it.skipIf(!url)('instructs real private and team turns and stores calls through 
       const dump=JSON.parse(readFileSync(fixture.fixtureDumpPath,'utf8'));
       expect(dump.systemPrompt).toContain('Open Brain is the durable workspace');
       expect(dump.systemPrompt).toContain(state.link.id);
+      for (const instruction of ['primary purpose is human context recall', 'do not wait for the user', 'actual allowed local file', 'Save at meaningful milestones', 'brief catch-up note', 'existing task ID', 'automatically populate the timeline']) {
+        expect(dump.systemPrompt).toContain(instruction);
+      }
       expect(dump.mcpConfig.mcpServers.agents.env.OMB_OPEN_BRAIN_ENABLED).toBe('1');
     }
   } finally { await fixture.close(); }
+});
+
+it('retains proactive human catch-up guidance when Open Brain is offline', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'brain-offline-guidance-'));
+  const bot = { id: randomUUID(), name: 'Planner' } as BotRecord;
+  const store = { bots: [bot], groups: [] } as unknown as Store;
+  const brain = new OpenBrainIntegration(join(root, 'brain'), store, async () => { throw new Error('Offline'); });
+  const prompt = await brain.prepare(bot, randomUUID());
+  expect(prompt).toContain('primary purpose is human context recall');
+  expect(prompt).toContain('brief catch-up note');
+  expect(prompt).toContain('call brain_record with kind=note');
+  expect(prompt).toContain('Omit file for notes and checkpoints');
+  expect(prompt).toContain('not a queued delivery');
+  expect(prompt).toContain('automatically populate the timeline');
+  expect(prompt).toContain('pending delivery');
+  expect(prompt).toContain('temporarily unavailable');
 });
