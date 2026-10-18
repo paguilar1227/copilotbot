@@ -15,5 +15,5 @@ export function stripOmbEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 export function childEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
-  return { ...stripOmbEnv(process.env), ...overrides };
+  return { ...stripOmbEnv(process.env), OMB_OPEN_BRAIN_ENABLED: "0", ...overrides };
 }

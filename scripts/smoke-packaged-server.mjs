@@ -76,6 +76,7 @@ const fixtureEnv = {
   XDG_CACHE_HOME: join(home, ".cache"),
   XDG_DATA_HOME: join(home, ".local", "share"),
   OMB_DATA_DIR: join(home, ".openmausbot"),
+  OMB_OPEN_BRAIN_ENABLED: "0",
   OMB_PORT: String(port),
   OMB_WEBHOOK_PORT: String(webhookPort),
   // Not a genuine key: enough to make the server look for its enterprise layer.

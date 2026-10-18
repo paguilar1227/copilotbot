@@ -12,7 +12,7 @@ export const pluginManifestSchema = z.object({
   format: z.literal('copilotbot.plugin'), apiVersion: z.literal(1), id,
   name: z.string().min(1), version: z.string().regex(/^\d+\.\d+\.\d+$/), description: z.string().min(1),
   backend: relativeFile.optional(),
-  pages: z.array(z.object({ id, title: z.string().min(1), entry: relativeFile }).strict()).default([]),
+  pages: z.array(z.object({ id, title: z.string().min(1), entry: relativeFile, webApp: z.object({ service: id, module: relativeFile }).strict().optional() }).strict()).default([]),
   commands: z.array(z.object({ id, title: z.string().min(1) }).strict()).default([]),
   settings: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]*$/), setting).default({}),
   services: z.record(id, z.object({ urlSetting: z.string(), tokenSetting: z.string().optional() }).strict()).default({}),
@@ -27,6 +27,7 @@ export const pluginManifestSchema = z.object({
     if (manifest.settings[service.urlSetting]?.type !== 'url' || (service.tokenSetting && manifest.settings[service.tokenSetting]?.type !== 'secret')) ctx.addIssue({ code: 'custom', message: 'Services require a URL setting and an optional secret setting' });
   }
   for (const field of Object.values(manifest.settings)) if (field.type === 'secret' && field.default !== undefined) ctx.addIssue({ code: 'custom', message: 'Secret defaults cannot be published in a manifest' });
+  for (const page of manifest.pages) if (page.webApp && !manifest.services[page.webApp.service]) ctx.addIssue({ code: 'custom', message: 'Unknown web app service' });
   for (const mcp of manifest.mcp) if (!manifest.services[mcp.service]) ctx.addIssue({ code: 'custom', message: 'Unknown MCP service' });
   if (manifest.commands.length && !manifest.backend) ctx.addIssue({ code: 'custom', message: 'Commands require a backend' });
 });

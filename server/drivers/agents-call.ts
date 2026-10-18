@@ -978,6 +978,10 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
     });
     return confirmationResult(r, `remembering ${entryName} for the team`, "entry");
   }
+  if (['brain_record', 'brain_task', 'brain_recall'].includes(name)) {
+    const result = await api(`/api/internal/open-brain/${name.slice(6)}`, { method: 'POST', body: JSON.stringify(args) });
+    return { text: JSON.stringify(result), ...(result.status === 'queued' ? { isError: true } : {}) };
+  }
   if (name === "session_search") {
     const q = String(args.query ?? "").trim();
     const since = typeof args.since === "string" ? args.since.trim() : "";

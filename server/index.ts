@@ -1,6 +1,9 @@
+import { ensureOpenBrainRuntime } from './copilotbot/open-brain-runtime.ts';
+import { OpenBrainIntegration, brainRecordSchema, brainTaskSchema } from './copilotbot/open-brain.ts';
 import { modelEffortLevels } from "../shared/model-effort.ts";
 import { fileURLToPath } from 'node:url';
 import { discoverPlugins, PluginHost } from './plugins/host.ts';
+import { webAppRoutes } from './plugins/web-app.ts';
 import { pluginRoutes } from './plugins/routes.ts';
 import { allMcpServers, pluginSkills } from './plugins/contributions.ts';
 // Import first: it reads a Cloud home's secrets off the launcher's pipe before any module can start a process.
@@ -600,7 +603,7 @@ import {
 } from "./phone-secret.ts";
 // Keep these two last, so loading the route table leaves module start-up order as is.
 import { json, onJsonBody, parsedBodyOf, readBody } from "./harness/http.ts";
-import { ROUTES, dispatchRoutes } from "./routes/table.ts";
+import { PASS, ROUTES, dispatchRoutes } from "./routes/table.ts";
 import { createHostedSlackRoutes } from "./routes/hosted-slack.ts";
 import { createBotPresetRoutes } from "./routes/bot-presets.ts";
 import { createBotMemoryRoutes } from "./routes/bot-memory.ts";
@@ -2066,6 +2069,7 @@ function agentsIntegration(
       OMB_COMMS_TOKEN: token,
       OMB_TURN_DEPTH: String(depth),
       OMB_SKILL_AUTHORING_ENABLED: skillAuthoring ? "1" : "0",
+      OMB_OPEN_BRAIN_ENABLED: openBrain ? "1" : "0",
       OMB_MEMORY_ENABLED: store.bot(botId)?.memoryEnabled === false ? "0" : "1",
       // Only advertises the tools; the routes behind them refuse regardless.
       OMB_SHARED_COMPUTERS_ENABLED: lendingEnabled() ? "1" : "0",
@@ -9167,6 +9171,7 @@ async function startTurn(
         { id: "learn", label: "Skill authoring", text: learnPrompt },
         { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
         { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (integrations.agents ? TEAM_MEMORY_PROMPT : "") },
+        { id: "open-brain", label: "Open Brain", text: openBrain ? await openBrain.prepare(bot, threadId) : "" },
         // Volatile, so a teammate starting or finishing never changes the stable half.
         teamAvailabilityPart(coordinationPrompt ? sectionPeers : []),
         { id: "recent", label: "Recent work", text: learningPinned ? "" : recentWorkPrompt(recentWork(recentWorkSources(bot), bot, { userName: cfg.profile?.name?.trim() || "User", currentThreadId: threadId, ...recentWorkFilter() })) },
@@ -11214,6 +11219,7 @@ async function runClaimedGroupMemberTurn(
     { id: "recent", label: "Recent work", text: recentWorkPrompt(recentLines) },
     { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
     { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (integrations.agents ? TEAM_MEMORY_PROMPT : "") },
+    { id: "open-brain", label: "Open Brain", text: openBrain ? await openBrain.prepare(bot, threadId) : "" },
     { id: "memory", label: "Memory", text: roomMemory ? `\n${roomMemory.trim()}` : "" },
     { id: "skills", label: "Skills index", text: workspace ? skillsSystemPrompt(bot.id, skillsHost.conversationSkills(bot, threadId), skillsHost.conversationStartedAt(threadId)) : "" },
     { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) }) },
@@ -13667,10 +13673,29 @@ const cloudMoveRoutes = createCloudMoveRoutes({
 });
 
 // `workspaceAccess` is assigned at boot, after this line: read it per request.
+let openBrain: OpenBrainIntegration | undefined;
 const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => broadcast({ kind: 'config', ...configStatus() }), new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url));
 const bundledPlugins = process.env.OMB_PLUGINS_DIR || fileURLToPath(new URL('../plugins/', import.meta.url));
 if (CLOUD_HOME || HOSTED_WORKSPACE) appPlugins.error = 'App extensions are available in self-hosted workspaces.';
 else await appPlugins.start(discoverPlugins(bundledPlugins));
+if (!CLOUD_HOME && !HOSTED_WORKSPACE && process.env.OMB_OPEN_BRAIN_ENABLED !== '0') {
+  if (process.env.OMB_OPEN_BRAIN_URL) await appPlugins.configure('open-brain-lite', { endpoint: process.env.OMB_OPEN_BRAIN_URL });
+  const firstUse = !existsSync(join(DATA_DIR, 'open-brain', 'state.json'));
+  if (firstUse) await appPlugins.enable('open-brain-lite', true);
+  openBrain = new OpenBrainIntegration(join(DATA_DIR, 'open-brain'), store, (path, options) => appPlugins.requestService('open-brain-lite', 'brain', path, options), () => broadcast({ kind: 'config', ...configStatus() }));
+  const runtimeSource = process.env.OMB_OPEN_BRAIN_RUNTIME ?? (process.env.OMB_RESOURCES_PATH ? join(process.env.OMB_RESOURCES_PATH, 'open-brain-runtime') : undefined);
+  const endpoint = String(appPlugins.get('open-brain-lite').installation.settings.endpoint);
+  void ensureOpenBrainRuntime(endpoint, runtimeSource, join(DATA_DIR, 'open-brain')).then(() => openBrain?.sync()).catch(error => { if (openBrain) openBrain.error = String(error); });
+  store.onChange(change => { if (change.type === 'bot' || change.type === 'group') void openBrain?.sync(); });
+}
+ROUTES.push(async ({ path, url, method, auth, res, json }) => {
+  if (!path.startsWith('/api/copilotbot/open-brain')) return PASS;
+  if (!auth.scopes.includes('admin')) return json(res, 403, { error: 'Owner access required' });
+  if (path === '/api/copilotbot/open-brain' && method === 'GET') return json(res, 200, { ...(openBrain?.status() ?? { configured: false }), link: openBrain?.link(url.searchParams.get('threadId') ?? '') });
+  if (path === '/api/copilotbot/open-brain/retry' && method === 'POST') { await openBrain?.sync(); return json(res, 200, openBrain?.status()); }
+  return json(res, 404, { error: 'Not found' });
+});
+ROUTES.push(webAppRoutes(appPlugins, id => sessions.isLive(id)));
 ROUTES.push(pluginRoutes(appPlugins));
 ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && entitled("admin") }));
 const orgInstallStatuses = () => orgLibrary?.installStatuses() ?? new Map();
@@ -14585,6 +14610,21 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
         }
       };
+      if (method === 'POST' && path.startsWith('/api/internal/open-brain/')) {
+        if (!openBrain) return json(res, 503, { error: 'Open Brain is not configured' });
+        const body = await readInternalBody();
+        const action = path.slice('/api/internal/open-brain/'.length);
+        if (action === 'record') {
+          const value = brainRecordSchema.parse(body);
+          const upload = value.file ? uploadableFiles([value.file], messageFileRootsForThread(internalSender.id, internalCapability.threadId)) : undefined;
+          if (upload && 'error' in upload) return json(res, 400, { error: upload.error });
+          requireActiveInternalCapability();
+          return json(res, 200, await openBrain.record(internalSender, internalCapability.threadId, value, upload?.files[0]));
+        }
+        if (action === 'task') { const value = brainTaskSchema.parse(body); requireActiveInternalCapability(); return json(res, 200, await openBrain.task(internalSender, internalCapability.threadId, value)); }
+        if (action === 'recall') { const value = z.object({ query: z.string(), scope: z.enum(['session','project']).default('session') }).strict().parse(body); return json(res, 200, await openBrain.recall(internalSender, internalCapability.threadId, value.query, value.scope)); }
+        return json(res, 404, { error: 'Unknown Open Brain operation' });
+      }
       const delegatedThisTurn = (taskId: string) => {
         (internalCapability.delegatedThisTurn ??= new Set()).add(taskId);
       };

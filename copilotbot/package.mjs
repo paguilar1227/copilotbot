@@ -20,7 +20,7 @@ config.productName = 'CopilotBot';
 config.artifactName = 'CopilotBot-${version}-${arch}.${ext}';
 config.publish = null;
 config.extraMetadata = {
-  name: 'copilotbot', productName: 'CopilotBot', version: `${upstreamPackage.version}-copilotbot.8`,
+  name: 'copilotbot', productName: 'CopilotBot', version: `${upstreamPackage.version}-copilotbot.9`,
   homepage: 'https://github.com/paguilar1227/copilotbot',
   repository: { type: 'git', url: 'https://github.com/paguilar1227/copilotbot.git' },
 };
@@ -46,6 +46,12 @@ if (reuse) {
   run('build:speech');
   run('build:cua');
 }
+const brainSource = process.env.OPEN_BRAIN_SOURCE ?? resolve(root, '../open-brain-lite');
+const brainRuntime = join(root, 'release-copilotbot', 'open-brain-runtime');
+if (!existsSync(join(brainSource, 'scripts/export-runtime.mjs'))) throw new Error('Set OPEN_BRAIN_SOURCE to the authoritative Open Brain Lite checkout.');
+const exportedBrain = spawnSync(process.execPath, [join(brainSource, 'scripts/export-runtime.mjs'), brainRuntime], { cwd: brainSource, stdio: 'inherit' });
+if (exportedBrain.status !== 0) throw new Error('Open Brain runtime export failed');
+config.extraResources.push({ from: brainRuntime, to: 'open-brain-runtime' });
 const buildConfig = join(root, 'release-copilotbot', 'build-config.json');
 mkdirSync(join(root, 'release-copilotbot'), { recursive: true });
 writeFileSync(buildConfig, JSON.stringify(config, null, 2));

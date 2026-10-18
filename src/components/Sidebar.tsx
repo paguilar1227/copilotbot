@@ -1,3 +1,4 @@
+import { OpenBrainDialog } from '@/copilotbot/OpenBrainDialog';
 import { track } from "@/lib/analytics";
 import { OrganizationIdentity } from "./OrganizationIdentity";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch } from "react";
@@ -1687,6 +1688,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const [teamLibraryOpen, setTeamLibraryOpen] = useState(false);
   const projects = useWorkspaceProjects(teamSettingsAllowed === true, JSON.stringify([state.sections, state.bots.map(bot => [bot.id, bot.section, bot.hidden])]));
   const [editingProject, setEditingProject] = useState<WorkspaceProject | null | undefined>(undefined);
+  const [brainOpen, setBrainOpen] = useState(false);
   const [rosterSource, setRosterSource] = useState<string | null>(null);
   const [teamInstallUrl, setTeamInstallUrl] = useState<string | null>(null);
   const [archivedBotsOpen, setArchivedBotsOpen] = useState(false);
@@ -2247,6 +2249,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
                 >
                   <FolderPlus size={16} className="text-ink-secondary" /> {t("team.create")}
                 </button>}
+                {teamSettingsAllowed && <button type="button" onClick={() => { setPlusOpen(false); setBrainOpen(true); }} className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[14px] text-ink hover:bg-raised/70"><Library size={16} className="text-ink-secondary" />Open Brain</button>}
                 {!remoteClient && <>
                 <button type="button" onClick={() => { setPlusOpen(false); setRosterSource(''); }}
                   className="flex w-full items-center gap-3 px-3.5 py-2 text-left text-[14px] text-ink hover:bg-raised/70">
@@ -2471,6 +2474,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
           onNewFolder={setNewFolderBotId}
           onNewTaskFolder={setNewTaskFolderBotId}
         />
+      {brainOpen && <OpenBrainDialog onClose={() => setBrainOpen(false)} threadId={state.bots.find(bot => bot.id === state.selectedId)?.threadId ?? state.groups.find(group => group.id === state.selectedId)?.threadId} />}
       {editingProject !== undefined && <WorkspaceProjectDialog project={editingProject} catalog={projects.catalog} bots={state.bots} pending={projects.pending} error={projects.error}
         onClose={() => setEditingProject(undefined)} onSave={value => projects.mutate(editingProject ? 'PUT' : 'POST', value)}
         onRemove={() => projects.mutate('DELETE', { id: editingProject?.id, revision: editingProject?.revision })} />}

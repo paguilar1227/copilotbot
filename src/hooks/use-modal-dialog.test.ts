@@ -11,12 +11,16 @@ vi.mock("react", async (original) => ({
 import { useModalDialog } from "./use-modal-dialog";
 
 class FakeElement extends EventTarget {
+  children: FakeElement[] = [];
+  shadowRoot?: { children: FakeElement[]; activeElement: FakeElement | null };
+  matches() { return true; }
   constructor(readonly name: string, readonly parent?: FakeElement) { super(); }
   focus() { document.activeElement = this; }
   hasAttribute() { return false; }
 }
 class FakeDialog extends FakeElement {
-  controls: FakeElement[] = [];
+  get controls() { return this.children; }
+  set controls(value: FakeElement[]) { this.children = value; }
   contains(node: unknown) { return node === this || this.controls.includes(node as FakeElement); }
   querySelectorAll() { return this.controls; }
 }
@@ -71,6 +75,19 @@ describe("modal dialog keyboard handling", () => {
   it("leaves an Escape that a field inside already handled", () => {
     key(dialog, "Escape", { prevented: true });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("includes embedded application controls when wrapping focus", () => {
+    const host = new FakeElement('shared-app', dialog);
+    host.matches = () => false;
+    const field = new FakeElement('embedded-input', host);
+    host.shadowRoot = { children: [field], activeElement: field };
+    dialog.controls = [first, host];
+    first.focus();
+    expect(key(dialog, 'Tab').defaultPrevented).toBe(false);
+    host.focus();
+    expect(key(dialog, 'Tab').defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(first);
   });
 
   it("wraps Tab and Shift-Tab inside the dialog", () => {

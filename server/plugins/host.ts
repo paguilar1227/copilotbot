@@ -111,7 +111,14 @@ export class PluginHost {
     }
     for (const directory of bundled) {
       const manifest = readManifest(directory);
-      if (!this.plugins.has(manifest.id)) await this.install(directory);
+      const previous = this.plugins.get(manifest.id);
+      if (!previous) await this.install(directory);
+      else if (previous.manifest.version !== manifest.version) {
+        const enabled = previous.installation.enabled;
+        previous.installation.enabled = false;
+        try { await this.install(directory); this.get(manifest.id).installation.enabled = enabled; this.save(); }
+        catch (error) { previous.installation.enabled = enabled; throw error; }
+      }
     }
     for (const plugin of this.plugins.values()) if (plugin.installation.enabled) this.launch(plugin);
     this.publish();
@@ -254,6 +261,16 @@ export class PluginHost {
     const target = new URL(`${base.pathname.replace(/\/$/, '')}${path}`, base);
     if (target.origin !== base.origin || target.username || target.password || target.hash) throw new Error('Service request leaves its configured origin');
     return target;
+  }
+
+  async requestService(id: string, service: string, path: string, options: RequestInit = {}): Promise<Response> {
+    const plugin = this.get(id);
+    const target = this.serviceUrl(plugin, service, path);
+    const definition = plugin.manifest.services[service]!;
+    const token = definition.tokenSetting ? plugin.installation.settings[definition.tokenSetting] : undefined;
+    const headers = new Headers(options.headers);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(target, { ...options, headers, redirect: 'error' });
   }
 
   async invoke(id: string, command: string, input: unknown, signal?: AbortSignal): Promise<unknown> {

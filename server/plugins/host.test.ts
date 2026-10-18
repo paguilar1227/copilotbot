@@ -146,7 +146,7 @@ describe('Open Brain Lite extension and authenticated routes', () => {
     expect(allMcpServers()).toEqual({});
   });
 
-  it('uses the declared service, keeps secrets server-side, and revokes MCP/skills on disable', async () => {
+  it('uses the declared service, keeps secrets server-side, and provides scoped-only brain skills', async () => {
     const requests: Array<{ path: string; authorization: string | undefined; body: unknown }> = [];
     const endpoint = await listen(createServer(async (req, res) => {
       requests.push({ path: req.url!, authorization: req.headers.authorization, body: req.method === 'POST' ? await readBody(req) : null });
@@ -159,20 +159,20 @@ describe('Open Brain Lite extension and authenticated routes', () => {
     await instance.invoke('open-brain-lite', 'capture-note', { projectId: '11111111-1111-4111-8111-111111111111', title: 'Decision', content: 'Use the durable project API' });
     expect(requests[1]).toMatchObject({ path: '/api/v1/content', authorization: 'Bearer private-test-token', body: { type: 'note', title: 'Decision', project_ids: ['11111111-1111-4111-8111-111111111111'] } });
     expect(JSON.stringify(instance.list())).not.toContain('private-test-token');
-    expect(allMcpServers().plugin_open_brain_lite).toMatchObject({ url: `${endpoint}/mcp` });
+    expect(allMcpServers().plugin_open_brain_lite).toBeUndefined();
     expect(customMcpServers({} as never, [])).toEqual({});
-    expect(Object.keys(customMcpServers({} as never, intersectResources(['plugin_open_brain_lite'], ['plugin_open_brain_lite']) ?? undefined))).toEqual(['plugin_open_brain_lite']);
+    expect(Object.keys(customMcpServers({} as never, intersectResources(['plugin_open_brain_lite'], ['plugin_open_brain_lite']) ?? undefined))).toEqual([]);
     expect(pluginSkills()[0]?.name).toBe('open-brain-lite');
     expect(listLibrarySkills().find(skill => skill.name === 'open-brain-lite')?.enabled).toBe(true);
-    expect(readFileSync(librarySkillFilePath('open-brain-lite'), 'utf8')).toContain('save_session');
-    expect(readLibrarySkillFile('open-brain-lite')).toContain('save_session');
+    expect(readFileSync(librarySkillFilePath('open-brain-lite'), 'utf8')).toContain('brain_record');
+    expect(readLibrarySkillFile('open-brain-lite')).toContain('brain_record');
     installLibrarySkill({ name: 'ordinary', instructions: '---\nname: ordinary\ndescription: Ordinary disabled library\n---\nInstructions', source: 'local-test' });
     expect(availableLibrarySkills({} as never).map(skill => skill.name)).toEqual(['open-brain-lite']);
     expect(availableSkillAssignments({} as never, ['ordinary', 'open-brain-lite'])).toEqual(['open-brain-lite']);
     await instance.setSkillEnabled('open-brain-lite', false);
     expect(listLibrarySkills().find(skill => skill.name === 'open-brain-lite')?.enabled).toBe(false);
     expect(instance.list()[0]!.status).toBe('ready');
-    expect(allMcpServers().plugin_open_brain_lite).toBeDefined();
+    expect(allMcpServers().plugin_open_brain_lite).toBeUndefined();
     await instance.setSkillEnabled('open-brain-lite', true);
     await instance.enable('open-brain-lite', false);
     expect(allMcpServers()).toEqual({}); expect(pluginSkills()).toEqual([]);

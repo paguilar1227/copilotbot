@@ -1,3 +1,4 @@
+import { OPEN_BRAIN_TOOLS } from '../copilotbot/open-brain-tools.ts';
 // The agents tool catalog and which tools a turn sees: definitions only, no environment, no calls.
 import { CREDENTIAL_TARGETS } from "../../shared/credential-request.ts";
 import { OPTIONS_CARD_LIMITS, WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card.ts";
@@ -11,6 +12,7 @@ export interface CatalogProfile {
   voiceNotes: boolean;
   cloudHome: boolean;
   memoryEnabled?: boolean;
+  openBrain?: boolean;
   /** The section's Chief of Staff; the server refuses Chief-only tools to every other bot. */
   chief: boolean;
   /** Written into start_thread's schema: the only bot_id it accepts. */
@@ -27,6 +29,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     voiceNotes: env.OMB_VOICE_NOTES === "1",
     cloudHome: env.OMB_CLOUD_HOME === "1",
     memoryEnabled: env.OMB_MEMORY_ENABLED !== "0",
+    openBrain: env.OMB_OPEN_BRAIN_ENABLED === "1",
     chief: env.OMB_CHIEF_OF_STAFF === "1",
     botId: env.OMB_BOT_ID ?? "",
     escalations: env.OMB_ESCALATIONS === "1",
@@ -172,6 +175,7 @@ const SELF_CHANGE_OUTCOME = " Read the result: a change to your own routines, sk
 const START_THREAD_SELF_ID = "Leave out, or use your own bot ID. For teammates use coordinate_bots.";
 
 const TOOL_DEFINITIONS = [
+  ...OPEN_BRAIN_TOOLS,
   {
     name: "create_options_card",
     description:
@@ -917,6 +921,7 @@ export function availableTools(profile: CatalogProfile) {
 
 function catalogTools(profile: CatalogProfile) {
   const BOT_SCOPED_TOOLS = TOOL_DEFINITIONS.filter((tool) =>
+    (profile.openBrain === true || !tool.name.startsWith("brain_")) &&
     (profile.botId === WATCHER_OPTIONS_CARD_BOT_ID || !WATCHER_TOOL_NAMES.has(tool.name)) &&
     (profile.memoryEnabled !== false || (tool.name !== "memory_update" && tool.name !== "memory_log")) &&
     (profile.escalations === true || tool.name !== "raise_escalation"));

@@ -150,6 +150,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     TMPDIR: fixtureTemp,
     HERMES_HOME: join(dataDir, ".hermes"),
     OMB_DATA_DIR: dataDir,
+    OMB_OPEN_BRAIN_ENABLED: "0",
     OMB_PORT: String(port),
     OMB_WEBHOOK_PORT: String(port + 1),
     // A caller's FAKE_CLAUDE_MODE overrides this below to drive failure paths.
@@ -162,6 +163,9 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // login shell's PATH, finding a developer's own engine CLIs that CI lacks.
     OMB_TEST_SEALED_PATH: "1",
   });
+  if (parentEnv.OMB_OPEN_BRAIN_URL && /^http:\/\/127\.0\.0\.1:\d+$/.test(parentEnv.OMB_OPEN_BRAIN_URL)) {
+    childEnv.OMB_OPEN_BRAIN_ENABLED = '1'; childEnv.OMB_OPEN_BRAIN_URL = parentEnv.OMB_OPEN_BRAIN_URL;
+  }
   // The fake engines' knobs are the one thing a caller may script into the child.
   for (const [key, value] of Object.entries(parentEnv)) {
     // FAKE_CLAUDE_DUMP stays the launcher's: assertions read fixtureDumpPath.

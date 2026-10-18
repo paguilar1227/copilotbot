@@ -11,8 +11,17 @@ export function useModalDialog(dialogRef: RefObject<HTMLElement | null>, onClose
     if (!dialog) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!dialog.contains(document.activeElement)) dialog.focus();
-    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
-      .filter((element) => !element.hasAttribute("hidden"));
+    const focusable = () => {
+      const controls: HTMLElement[] = [];
+      const visit = (root: Element | ShadowRoot) => {
+        for (const child of root.children) {
+          if (child instanceof HTMLElement && child.matches(FOCUSABLE) && !child.hasAttribute('hidden')) controls.push(child);
+          visit(child.shadowRoot ?? child);
+        }
+      };
+      visit(dialog);
+      return controls;
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === "Escape") {
@@ -24,12 +33,14 @@ export function useModalDialog(dialogRef: RefObject<HTMLElement | null>, onClose
       if (event.key !== "Tab") return;
       const controls = focusable();
       if (!controls.length) return event.preventDefault();
+      let active = document.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
       const first = controls[0]!;
       const last = controls[controls.length - 1]!;
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement) || document.activeElement === dialog)) {
+      if (event.shiftKey && (active === first || !event.composedPath().includes(dialog) || active === dialog)) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && active === last) {
         event.preventDefault();
         first.focus();
       }

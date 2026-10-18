@@ -97,3 +97,13 @@ On the phone: pair with the computer, then open **Settings → Provider sign-in*
 The phone button starts native WebRTC live voice using the OpenAI or Azure provider configured on the computer. Self-hosted calls use the owner's provider account without the upstream hosted Pro plan. Provider fees still apply. Azure API keys and Entra credentials stay on the computer. Microphone permission, captions, mute, hang-up, interruption and idle cleanup remain native. Configure deployments on the computer; choose the Live provider in call settings. A simulator preview or successful signaling exchange does not prove microphone/audio quality on a physical phone.
 
 Keep downstream views in `ios/App/CopilotBot/`, wire models in `ios/Sources/CompanionCore/CopilotBot.swift`, and project identity changes in `ios/copilotbot-project.mjs`. App/shared/client files contain narrow hooks. Companion route additions live in `companion/src/copilotbot/`; they do not expose general config writes, provider keys or MCP installation.
+
+## Shared Open Brain workspace
+
+The **Open Brain** item in the sidebar menu opens the selected conversation's workspace. Each private bot thread and team thread automatically receives its own Open Brain session. Private bots and teams use separate parent scopes; moving a bot does not merge its old sessions. Team captures carry `bot:` and stable `bot-id:` tags for every credited contributor, plus `kind:` and user-supplied topic tags.
+
+Agents receive `brain_record`, `brain_task`, and `brain_recall` on every turn. The host binds those tools to the active conversation and actor. Failed writes remain in the local retry journal; the UI reports pending captures. Uploaded artifacts are copied locally before retry, and repeated delivery retains a stable capture identifier.
+
+The web application and embedded workspace come from [Open Brain Lite](https://github.com/paguilar1227/open-brain-lite). Its `embedded.js` entry mounts the same React app directly in an isolated shadow root. CopilotBot proxies its API and files, retaining configured credentials server-side. The plugin downloads the current module whenever opened, so updating the connected Open Brain service updates its UI. There is no copied Open Brain UI in this repository.
+
+Desktop packaging exports the runtime from the sibling `open-brain-lite` checkout, or `OPEN_BRAIN_SOURCE`. A healthy configured service is reused. Otherwise, the bundled upstream Docker Compose runtime starts locally; Docker must be installed and running. The extension's address and optional server token are editable in **App extensions**. Runtime logs and the pending journal live under the app data directory's `open-brain` folder.
