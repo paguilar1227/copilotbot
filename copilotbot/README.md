@@ -100,7 +100,9 @@ Keep downstream views in `ios/App/CopilotBot/`, wire models in `ios/Sources/Comp
 
 ## Shared Open Brain workspace
 
-The **Open Brain** item in the sidebar menu opens the selected conversation's workspace. Each private bot thread and team thread automatically receives its own Open Brain session. Private bots and teams use separate parent scopes; moving a bot does not merge its old sessions. Team captures carry `bot:` and stable `bot-id:` tags for every credited contributor, plus `kind:` and user-supplied topic tags.
+The **Open Brain** item in the sidebar menu opens the selected conversation's workspace. Each private bot thread and team thread automatically receives its own Open Brain session, identified by a stable key containing the installation and thread IDs. CopilotBot projects are mirrored one for one in Open Brain. Existing and new threads follow their bot or team's current project; moving or renaming a project updates the existing sessions and their contents without replacing session IDs. Threads outside a project are standalone sessions. Empty obsolete integration-owned projects are archived; unrelated content is retained.
+
+Project organization does not merge conversations or change memory ownership. Project recall searches related threads belonging to the same bot or team within the current project. Team captures carry `bot:` and stable `bot-id:` tags for every credited contributor, plus `kind:` and user-supplied topic tags.
 
 Agents receive `brain_record`, `brain_task`, and `brain_recall` on every turn. The host binds those tools to the active conversation and actor. Failed writes remain in the local retry journal; the UI reports pending captures. Uploaded artifacts are copied locally before retry, and repeated delivery retains a stable capture identifier.
 

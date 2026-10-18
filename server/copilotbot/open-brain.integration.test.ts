@@ -21,7 +21,7 @@ it.skipIf(!url)('persists real session-owned notes, tasks and files, isolates re
   expect(brain.status()).toMatchObject({ sessions: 3 });
   const ids = threads.map(thread => brain.link(thread)!);
   expect(new Set(ids.map(link => link.id)).size).toBe(3);
-  expect(new Set(ids.map(link => link.projectId)).size).toBe(3);
+  expect(ids.every(link => link.projectId === null)).toBe(true);
   await brain.prepare(alice,threads[2]); await brain.prepare(bob,threads[2]);
   expect(brain.link(threads[2])?.id).toBe(ids[2].id);
   const saved = await brain.record(alice,threads[2],{title:'Use queueing',text:'Reviewed worker evidence; queue writes.',kind:'decision',tags:['architecture'],contributors:[bob.id]});

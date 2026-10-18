@@ -13686,7 +13686,7 @@ if (!CLOUD_HOME && !HOSTED_WORKSPACE && process.env.OMB_OPEN_BRAIN_ENABLED !== '
   const runtimeSource = process.env.OMB_OPEN_BRAIN_RUNTIME ?? (process.env.OMB_RESOURCES_PATH ? join(process.env.OMB_RESOURCES_PATH, 'open-brain-runtime') : undefined);
   const endpoint = String(appPlugins.get('open-brain-lite').installation.settings.endpoint);
   void ensureOpenBrainRuntime(endpoint, runtimeSource, join(DATA_DIR, 'open-brain')).then(() => openBrain?.sync()).catch(error => { if (openBrain) openBrain.error = String(error); });
-  store.onChange(change => { if (change.type === 'bot' || change.type === 'group') void openBrain?.sync(); });
+  store.onChange(change => { if (change.type === 'bot' || change.type === 'group' || change.type === 'sections') void openBrain?.sync(); });
 }
 ROUTES.push(async ({ path, url, method, auth, res, json }) => {
   if (!path.startsWith('/api/copilotbot/open-brain')) return PASS;
@@ -14095,7 +14095,7 @@ ROUTES.push(resourceRoutes({ store, cfg, policies: resourcePolicies, sessionLive
   busy: bot => Boolean(bot.busy || activeGroupTurnForBot(bot.id)),
   routines: botId => routines?.listRoutines().filter(routine => routine.botId === botId) ?? [],
 }));
-ROUTES.push(workspaceProjectRoutes({ store, changed: () => broadcast({ kind: "workspace-projects" }, { adminOnly: true }), sessionLive: id => sessions.isLive(id) }));
+ROUTES.push(workspaceProjectRoutes({ store, changed: () => { broadcast({ kind: "workspace-projects" }, { adminOnly: true }); void openBrain?.sync(); }, sessionLive: id => sessions.isLive(id) }));
 ROUTES.push(rosterRoutes({ store, policies: resourcePolicies, creation: botCreationDeps }));
 ROUTES.push(createLiveRoutes({
   calls: liveCalls,
