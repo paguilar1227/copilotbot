@@ -8,8 +8,11 @@ if ($Dependency -eq 'desktop') {
   exit 0
 }
 if ($Dependency -eq 'wsl') {
-  & "$env:WINDIR\System32\wsl.exe" --status *> $null
-  $arguments = if ($LASTEXITCODE -eq 0) { @('--update') } else { @('--install', '--no-distribution') }
+  # On Windows PowerShell 5.1, redirecting a native program's stderr can
+  # terminate the script before LASTEXITCODE is checked. Missing WSL is an
+  # expected status, so inspect the process exit code without that redirection.
+  $status = Start-Process -FilePath "$env:WINDIR\System32\wsl.exe" -ArgumentList '--status' -WindowStyle Hidden -Wait -PassThru
+  $arguments = if ($status.ExitCode -eq 0) { @('--update') } else { @('--install', '--no-distribution') }
   $process = Start-Process -FilePath "$env:WINDIR\System32\wsl.exe" -ArgumentList $arguments -Verb RunAs -Wait -PassThru
   if ($process.ExitCode -notin @(0, 3010)) { throw "WSL installation returned $($process.ExitCode)." }
   exit $process.ExitCode

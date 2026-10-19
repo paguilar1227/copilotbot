@@ -34,6 +34,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts src/copilotbot/OpenBrainSetup.test.ts
+      - name: Regression - WSL setup under Windows PowerShell 5.1
+        shell: powershell
+        run: ./copilotbot/windows/setup-dependency.test.ps1
       - name: Regression - extract and run the official Windows CUA archive
         run: pnpm build:cua:win
       - name: Package one installer with Copilot and Open Brain
