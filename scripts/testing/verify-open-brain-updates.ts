@@ -36,6 +36,32 @@ const project = 'copilotbot-update-test-' + randomUUID();
 const docker = execFileSync('which', ['docker'], { encoding: 'utf8' }).trim();
 const dockerHost = process.env.DOCKER_HOST ?? execFileSync(docker, ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'], { encoding: 'utf8' }).trim();
 const dockerRun = (args: string[]) => execFileSync(docker, args, { stdio: 'inherit' });
+if (process.env.BRAIN_TEST_APP_IMAGE) {
+  const image = process.env.BRAIN_TEST_APP_IMAGE;
+  assert(/^[a-zA-Z0-9][a-zA-Z0-9._/:-]*$/.test(image));
+  execFileSync(docker, ['image', 'inspect', image], { stdio: 'ignore' });
+  const installed = JSON.parse(execFileSync(docker, ['run', '--rm', '--network', 'none', '--entrypoint', 'cat', image, '/app/package-lock.json'], { encoding: 'utf8' }));
+  const expected = JSON.parse(readFileSync(join(brain, 'package-lock.json'), 'utf8'));
+  const dependencies = (lock: any) => { delete lock.version; delete lock.packages[''].version; return lock; };
+  assert.deepEqual(dependencies(installed), dependencies(expected), 'Reused image must have the exact authoritative dependency lock');
+  for (const directory of [previous, next, bad]) {
+    for (const built of ['shared/dist', 'backend/dist', 'frontend/dist']) cpSync(join(brain, built), join(directory, built), { recursive: true });
+    writeFileSync(join(directory, 'Dockerfile'), `FROM ${image}
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY shared/ ./shared/
+COPY backend/package.json ./backend/package.json
+COPY backend/dist/ ./backend/dist/
+COPY frontend/dist/ ./frontend/dist/
+COPY migrations/ ./backend/migrations/
+COPY backend/python/ ./backend/python/
+COPY plugin/ ./plugin/
+COPY scripts/ ./scripts/
+CMD ["node", "backend/dist/server.js"]
+` + (directory === bad ? 'CMD ["node", "scripts/fail-upgrade.cjs"]\n' : ''));
+  }
+}
+
 if (process.env.BRAIN_TEST_MODELS_VOLUME) {
   const volume = process.env.BRAIN_TEST_MODELS_VOLUME;
   assert(/^[a-zA-Z0-9_.-]+$/.test(volume));
