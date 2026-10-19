@@ -1,4 +1,4 @@
-import { ensureOpenBrainRuntime } from './copilotbot/open-brain-runtime.ts';
+import { OpenBrainRuntime } from './copilotbot/open-brain-runtime.ts';
 import { OpenBrainIntegration, brainRecordSchema, brainTaskSchema } from './copilotbot/open-brain.ts';
 import { modelEffortLevels } from "../shared/model-effort.ts";
 import { fileURLToPath } from 'node:url';
@@ -200,7 +200,7 @@ import {
 } from "./config.ts";
 import { sweepThreadEventLogs, type ThreadLogRetentionCandidate } from "./thread-retention.ts";
 import { ComputerControl } from "./computer-control.ts";
-import { augmentedPath, resetPathCache } from "./env-path.ts";
+import { registerPathDir, augmentedPath, resetPathCache } from "./env-path.ts";
 import { registerEnginesBinDir } from "./engine-install.ts";
 import { appendUsage, flushUsageLedger, type UsageRow, type UsageTrigger } from "./usage-ledger.ts";
 import { GroupUsageReader } from "./group-thread-usage.ts";
@@ -821,6 +821,7 @@ function customDomainStatus() {
 const registry = new ProviderRegistry(BUILT_IN_DRIVERS);
 const supportsApprovalMode = createApprovalModeSupport(registry);
 registerEnginesBinDir();
+if (process.env.OMB_RESOURCES_PATH) registerPathDir(join(process.env.OMB_RESOURCES_PATH, "copilot-cli"));
 
 // Set only when a turn is admitted, never on queue or steer, so a second person's words cannot re-book the first person's turn.
 const turnTriggers = new Map<string, UsageTrigger>();
@@ -13674,6 +13675,7 @@ const cloudMoveRoutes = createCloudMoveRoutes({
 
 // `workspaceAccess` is assigned at boot, after this line: read it per request.
 let openBrain: OpenBrainIntegration | undefined;
+let brainRuntime: OpenBrainRuntime | undefined;
 const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => broadcast({ kind: 'config', ...configStatus() }), new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url));
 const bundledPlugins = process.env.OMB_PLUGINS_DIR || fileURLToPath(new URL('../plugins/', import.meta.url));
 if (CLOUD_HOME || HOSTED_WORKSPACE) appPlugins.error = 'App extensions are available in self-hosted workspaces.';
@@ -13685,12 +13687,22 @@ if (!CLOUD_HOME && !HOSTED_WORKSPACE && process.env.OMB_OPEN_BRAIN_ENABLED !== '
   openBrain = new OpenBrainIntegration(join(DATA_DIR, 'open-brain'), store, (path, options) => appPlugins.requestService('open-brain-lite', 'brain', path, options), () => broadcast({ kind: 'config', ...configStatus() }));
   const runtimeSource = process.env.OMB_OPEN_BRAIN_RUNTIME ?? (process.env.OMB_RESOURCES_PATH ? join(process.env.OMB_RESOURCES_PATH, 'open-brain-runtime') : undefined);
   const endpoint = String(appPlugins.get('open-brain-lite').installation.settings.endpoint);
-  void ensureOpenBrainRuntime(endpoint, runtimeSource, join(DATA_DIR, 'open-brain')).then(() => openBrain?.sync()).catch(error => { if (openBrain) openBrain.error = String(error); });
+  brainRuntime = new OpenBrainRuntime({ endpoint, source: runtimeSource, data: join(DATA_DIR, 'open-brain'), resources: process.env.OMB_RESOURCES_PATH });
+  void brainRuntime.start().then(() => openBrain?.sync());
   store.onChange(change => { if (change.type === 'bot' || change.type === 'group' || change.type === 'sections') void openBrain?.sync(); });
 }
 ROUTES.push(async ({ path, url, method, auth, res, json }) => {
   if (!path.startsWith('/api/copilotbot/open-brain')) return PASS;
   if (!auth.scopes.includes('admin')) return json(res, 403, { error: 'Owner access required' });
+  if (path === '/api/copilotbot/open-brain/setup' && method === 'GET') return json(res, 200, brainRuntime?.status() ?? { phase: 'unmanaged', managed: false, windows: false, busy: false, message: 'Open Brain is not managed by this workspace.' });
+  if (method === 'POST' && path.startsWith('/api/copilotbot/open-brain/setup/')) {
+    if (!brainRuntime) return json(res, 409, { error: 'Open Brain is not configured.' });
+    const action = path.slice('/api/copilotbot/open-brain/setup/'.length);
+    if (action === 'start') void brainRuntime.start().then(() => openBrain?.sync());
+    else if (action === 'docker' || action === 'wsl' || action === 'desktop') void brainRuntime.install(action);
+    else return json(res, 400, { error: 'Unknown setup action' });
+    return json(res, 202, brainRuntime.status());
+  }
   if (path === '/api/copilotbot/open-brain' && method === 'GET') return json(res, 200, { ...(openBrain?.status() ?? { configured: false }), link: openBrain?.link(url.searchParams.get('threadId') ?? '') });
   if (path === '/api/copilotbot/open-brain/retry' && method === 'POST') { await openBrain?.sync(); return json(res, 200, openBrain?.status()); }
   return json(res, 404, { error: 'Not found' });

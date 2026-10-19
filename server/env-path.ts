@@ -51,6 +51,7 @@ function windowsKnownDirs(): string[] {
   const appData = process.env.APPDATA ?? join(home, "AppData", "Roaming");
   const localAppData = process.env.LOCALAPPDATA ?? join(home, "AppData", "Local");
   return [
+    join(localAppData, "Programs", "DockerDesktop", "resources", "bin"),
     join(appData, "npm"), // npm -g shims: claude, codex
     join(home, ".kimi-code", "bin"), // recover Kimi installs after a GUI launch too
     join(home, ".grok", "bin"), // x.ai installer

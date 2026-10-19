@@ -9,9 +9,11 @@ const root = resolve(import.meta.dirname, '..');
 const upstreamPackage = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('CopilotBot requires Node.js 24 or newer.');
 const run = (...args) => {
-  const result = spawnSync('pnpm', args, { cwd: root, stdio: 'inherit' });
+  const result = spawnSync('pnpm', args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.status !== 0) throw new Error(`pnpm ${args.join(' ')} failed`);
 };
+const windows = process.argv.includes('--win');
+if (windows && (process.platform !== 'win32' || process.arch !== 'x64')) throw new Error('Build the Windows installer on Windows x64.');
 const reuseAt = process.argv.indexOf('--reuse-resources');
 const reuse = reuseAt < 0 ? undefined : resolve(process.argv[reuseAt + 1]);
 const config = parse(readFileSync(join(root, 'electron-builder.yml'), 'utf8'));
@@ -20,7 +22,7 @@ config.productName = 'CopilotBot';
 config.artifactName = 'CopilotBot-${version}-${arch}.${ext}';
 config.publish = null;
 config.extraMetadata = {
-  name: 'copilotbot', productName: 'CopilotBot', version: `${upstreamPackage.version}-copilotbot.11`,
+  name: 'copilotbot', productName: 'CopilotBot', version: `${upstreamPackage.version}-copilotbot.12`,
   homepage: 'https://github.com/paguilar1227/copilotbot',
   repository: { type: 'git', url: 'https://github.com/paguilar1227/copilotbot.git' },
 };
@@ -28,7 +30,18 @@ config.protocols = [{ name: 'CopilotBot package install', schemes: ['copilotbot'
 config.directories.output = 'release-copilotbot';
 config.mac.identity = null;
 config.extends = null;
-if (reuse) {
+if (windows && reuse) throw new Error('--reuse-resources is only supported on macOS.');
+if (windows) {
+  run('package:prepare');
+  run('build:cua:win');
+  run('exec', 'node', 'copilotbot/windows/prepare-copilot.mjs');
+  config.win.target = [{ target: 'nsis', arch: ['x64'] }];
+  config.nsis = { ...config.nsis, oneClick: false, allowToChangeInstallationDirectory: true, shortcutName: 'CopilotBot', artifactName: 'CopilotBot-${version}-windows-x64-setup.${ext}', deleteAppDataOnUninstall: false };
+  config.extraResources.push(
+    { from: 'dist-native/copilot-win32-x64', to: 'copilot-cli', filter: ['**/*', '!copilot.zip'] },
+    { from: 'copilotbot/windows/setup-dependency.ps1', to: 'copilotbot-setup/setup-dependency.ps1' },
+  );
+} else if (reuse) {
   for (const directory of ['cua-driver', 'cua-sdk', 'cloudflared', 'browser-engine', 'OpenMausBot Speech.app', 'android-platform-tools']) {
     if (!existsSync(join(reuse, directory))) throw new Error(`Missing reusable runtime: ${directory}`);
   }
@@ -55,4 +68,4 @@ config.extraResources.push({ from: brainRuntime, to: 'open-brain-runtime' });
 const buildConfig = join(root, 'release-copilotbot', 'build-config.json');
 mkdirSync(join(root, 'release-copilotbot'), { recursive: true });
 writeFileSync(buildConfig, JSON.stringify(config, null, 2));
-await build({ targets: Platform.MAC.createTarget(['dir'], Arch.arm64), config: buildConfig });
+await build({ targets: windows ? Platform.WINDOWS.createTarget(['nsis'], Arch.x64) : Platform.MAC.createTarget(['dir'], Arch.arm64), config: buildConfig });

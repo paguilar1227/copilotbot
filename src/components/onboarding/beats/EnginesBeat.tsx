@@ -1,3 +1,4 @@
+import { OpenBrainSetup } from "@/copilotbot/OpenBrainSetup";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, RefreshCw } from "lucide-react";
 import { EngineSetup } from "@/components/EngineSetup";
@@ -198,6 +199,7 @@ export function EnginesBeat({
             })}
       </div>
 
+      <OpenBrainSetup />
       <PrimaryButton onClick={onNext} className="mt-5">
         {t("onboarding.continue")}
       </PrimaryButton>

@@ -12,6 +12,14 @@ Build the macOS app with `node copilotbot/package.mjs`. It produces `release-cop
 
 For a local build, `node copilotbot/package.mjs --reuse-resources /Applications/OpenMausBot.app/Contents/Resources` reuses the installed upstream native runtimes while rebuilding the UI, server, companion, and Electron code. The installed app is read only. This optional shortcut targets macOS arm64. A distributable build needs a signing identity and notarization configured by its owner.
 
+### Windows installer
+
+The Windows x64 installer includes CopilotBot, a checksum-verified Copilot CLI, the Open Brain plugin, and the exact upstream Open Brain runtime source. On first launch, the **Open Brain Lite** setup card checks Docker Desktop, enables or updates WSL on request, and starts the local database and models. Docker's own installer remains visible for license review. Windows can request administrator access and a restart; reopen CopilotBot to resume. The same setup card is available from **Open Brain** in the sidebar.
+
+Windows 11 with hardware virtualization and Docker Desktop's WSL 2 backend is required for the bundled Open Brain service. A working internet connection is needed for the initial Docker, container and model downloads. Copilot sign-in opens GitHub's device-code flow; subscriptions and credentials are not included in the installer. Existing Docker installations and existing healthy Open Brain services are reused. CopilotBot data and Docker volumes are retained during app updates and uninstall.
+
+Build on Windows x64 with `node copilotbot/package.mjs --win` after `pnpm install --frozen-lockfile`. Set `OPEN_BRAIN_SOURCE` to the authoritative Open Brain Lite checkout. `.github/workflows/copilotbot-windows.yml` pins that source revision, builds and installs the NSIS package in a clean application directory, and uploads the installer plus SHA-256 checksum. A separate clean Windows 11 first-run acceptance test must pass before publishing; a Windows Server build alone does not prove Docker Desktop setup. The app is currently unsigned, so Windows may show an unknown-publisher warning.
+
 ### GitHub Copilot
 
 Open Settings → Engines → GitHub Copilot. If the CLI is missing, the setup card explains how to install it or select its path. **Set up Copilot** runs `copilot login --device-code`, shows the one-time code, and opens GitHub. The native CLI owns its credential. No token is copied into the app.
