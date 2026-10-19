@@ -125,7 +125,8 @@ export class OpenBrainRuntime {
     const args = ['compose', '--project-name', this.options.projectName ?? 'copilotbot-brain', '--env-file', envFile, '-f', join(source!, 'docker-compose.yml')];
     this.set('starting', 'Preparing Open Brain and its local database. The first setup downloads containers and models; keep CopilotBot open.');
     await this.run('docker', [...args, 'build'], source);
-    await this.run('docker', [...args, 'up', '-d', '--force-recreate', '--wait', 'app'], source);
+    await this.run('docker', [...args, 'up', '-d', '--wait', 'db', 'ollama'], source);
+    await this.run('docker', [...args, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'app'], source);
     await this.run('docker', [...args, 'exec', '-T', 'app', 'node', 'scripts/verify-models.mjs', '--pull'], source);
     if (!await this.healthy()) throw new Error('Open Brain health check failed');
     if (this.options.verify) await this.options.verify();
