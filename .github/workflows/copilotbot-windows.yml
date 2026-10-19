@@ -53,9 +53,11 @@ jobs:
           $destination = Join-Path $env:RUNNER_TEMP 'CopilotBot Clean Install'
           $process = Start-Process $installer -ArgumentList '/S', "/D=$destination" -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw "NSIS failed: $($process.ExitCode)" }
-          @('CopilotBot.exe', 'resources/server/index.js', 'resources/ui/index.html', 'resources/copilot-cli/copilot.exe', 'resources/open-brain-runtime/docker-compose.yml', 'resources/copilotbot-setup/setup-dependency.ps1', 'resources/plugins/open-brain-lite/plugin.json') | ForEach-Object {
+          @('CopilotBot.exe', 'resources/server/index.js', 'resources/ui/index.html', 'resources/copilot-cli/copilot.exe', 'resources/powershell/pwsh.exe', 'resources/licenses/github-copilot-cli-LICENSE.md', 'resources/open-brain-runtime/docker-compose.yml', 'resources/copilotbot-setup/setup-dependency.ps1', 'resources/plugins/open-brain-lite/plugin.json') | ForEach-Object {
             if (-not (Test-Path (Join-Path $destination $_))) { throw "Missing installed file: $_" }
           }
+          & "$destination/resources/powershell/pwsh.exe" -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
+          if ($LASTEXITCODE -ne 0) { throw 'Installed PowerShell cannot start' }
           & "$destination/resources/copilot-cli/copilot.exe" --version
           if ($LASTEXITCODE -ne 0) { throw 'Installed Copilot cannot start' }
           Get-FileHash $installer -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content release-copilotbot/SHA256SUMS.txt

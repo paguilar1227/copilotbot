@@ -39,6 +39,7 @@ if (windows) {
   config.nsis = { ...config.nsis, oneClick: false, allowToChangeInstallationDirectory: true, shortcutName: 'CopilotBot', artifactName: 'CopilotBot-${version}-windows-x64-setup.${ext}', deleteAppDataOnUninstall: false };
   config.extraResources.push(
     { from: 'dist-native/copilot-win32-x64', to: 'copilot-cli', filter: ['**/*', '!copilot.zip'] },
+    { from: 'dist-native/powershell-win32-x64', to: 'powershell', filter: ['**/*', '!powershell.zip'] },
     { from: 'copilotbot/windows/setup-dependency.ps1', to: 'copilotbot-setup/setup-dependency.ps1' },
   );
 } else if (reuse) {

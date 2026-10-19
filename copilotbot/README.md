@@ -14,7 +14,7 @@ For a local build, `node copilotbot/package.mjs --reuse-resources /Applications/
 
 ### Windows installer
 
-The Windows x64 installer includes CopilotBot, a checksum-verified Copilot CLI, the Open Brain plugin, and the exact upstream Open Brain runtime source. On first launch, the **Open Brain Lite** setup card checks Docker Desktop, enables or updates WSL on request, and starts the local database and models. Docker's own installer remains visible for license review. Windows can request administrator access and a restart; reopen CopilotBot to resume. The same setup card is available from **Open Brain** in the sidebar.
+The Windows x64 installer includes CopilotBot, a checksum-verified Copilot CLI and its required portable PowerShell 7 runtime, the Open Brain plugin, and the exact upstream Open Brain runtime source. On first launch, the **Open Brain Lite** setup card checks Docker Desktop, enables or updates WSL on request, and starts the local database and models. Docker's own installer remains visible for license review. Windows can request administrator access and a restart; reopen CopilotBot to resume. The same setup card is available from **Open Brain** in the sidebar.
 
 Windows 11 with hardware virtualization and Docker Desktop's WSL 2 backend is required for the bundled Open Brain service. A working internet connection is needed for the initial Docker, container and model downloads. Copilot sign-in opens GitHub's device-code flow; subscriptions and credentials are not included in the installer. Existing Docker installations and existing healthy Open Brain services are reused. CopilotBot data and Docker volumes are retained during app updates and uninstall.
 

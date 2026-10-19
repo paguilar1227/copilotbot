@@ -821,7 +821,10 @@ function customDomainStatus() {
 const registry = new ProviderRegistry(BUILT_IN_DRIVERS);
 const supportsApprovalMode = createApprovalModeSupport(registry);
 registerEnginesBinDir();
-if (process.env.OMB_RESOURCES_PATH) registerPathDir(join(process.env.OMB_RESOURCES_PATH, "copilot-cli"));
+if (process.env.OMB_RESOURCES_PATH) {
+  registerPathDir(join(process.env.OMB_RESOURCES_PATH, "copilot-cli"));
+  registerPathDir(join(process.env.OMB_RESOURCES_PATH, "powershell"));
+}
 
 // Set only when a turn is admitted, never on queue or steer, so a second person's words cannot re-book the first person's turn.
 const turnTriggers = new Map<string, UsageTrigger>();
