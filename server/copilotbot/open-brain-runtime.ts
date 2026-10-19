@@ -54,7 +54,7 @@ export class OpenBrainRuntime {
     });
     if (managed) this.updates = new OpenBrainUpdates({ data: options.data, bundled: options.source!, projectName: options.projectName ?? 'copilotbot-brain', run: this.run,
       previous: options.resources && join(options.resources, 'open-brain-runtime-previous'),
-      boot: source => this.boot(source), changed: () => options.changed?.(), maintenance: options.maintenance ?? (async action => action()), feed: options.releaseFeed });
+      boot: (source, recovery) => this.boot(source, recovery), changed: () => options.changed?.(), maintenance: options.maintenance ?? (async action => action()), feed: options.releaseFeed });
   }
   status(): BrainRuntimeStatus { return { ...this.state, updates: existsSync(join(this.options.data, 'runtime.env')) ? this.updates?.status() : undefined }; }
   unavailableForWrites() { return Boolean(this.updates?.maintenance || this.updates?.recoveryRequired); }
@@ -117,7 +117,7 @@ export class OpenBrainRuntime {
     if (bundledUpdate) await this.updates!.installBundled();
     else await this.boot(source!);
   }
-  private async boot(source: string) {
+  private async boot(source: string, recovery = false) {
     const { data, endpoint } = this.options;
     const envFile = join(data, 'runtime.env');
     mkdirSync(data, { recursive: true, mode: 0o700 });
@@ -127,7 +127,7 @@ export class OpenBrainRuntime {
     await this.run('docker', [...args, 'build'], source);
     await this.run('docker', [...args, 'up', '-d', '--wait', 'db', 'ollama'], source);
     await this.run('docker', [...args, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'app'], source);
-    await this.run('docker', [...args, 'exec', '-T', 'app', 'node', 'scripts/verify-models.mjs', '--pull'], source);
+    await this.run('docker', [...args, 'exec', '-T', 'app', 'node', 'scripts/verify-models.mjs', ...(recovery ? [] : ['--pull'])], source);
     if (!await this.healthy()) throw new Error('Open Brain health check failed');
     if (this.options.verify) await this.options.verify();
     else {
