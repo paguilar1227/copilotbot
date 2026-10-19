@@ -40,10 +40,10 @@ jobs:
         run: node copilotbot/package.mjs --win
         env:
           OPEN_BRAIN_SOURCE: ${{ github.workspace }}/open-brain-source
-      - name: Verify bundled browser and server
-        run: |
-          node scripts/smoke-browser-bundle.mjs --resources release-copilotbot/win-unpacked/resources
-          node scripts/smoke-packaged-server.mjs --browser-bundle release-copilotbot/win-unpacked/resources/browser-engine
+      - name: Verify the bundled browser
+        run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release-copilotbot/win-unpacked/resources"
+      - name: Verify the packaged server
+        run: node scripts/smoke-packaged-server.mjs --browser-bundle "${{ github.workspace }}/release-copilotbot/win-unpacked/resources/browser-engine"
         env:
           OMB_SMOKE_DIST: ${{ github.workspace }}/release-copilotbot/win-unpacked/resources/server
       - name: Install in a clean app directory and verify its shipped resources
@@ -60,6 +60,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installed Copilot cannot start' }
           Get-FileHash $installer -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content release-copilotbot/SHA256SUMS.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
         with:
           name: copilotbot-windows-installer
           path: |
