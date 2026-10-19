@@ -1,4 +1,4 @@
-> **CopilotBot private downstream:** setup, build, and upstream-update instructions are in [copilotbot/README.md](copilotbot/README.md).
+> **Looking for CopilotBot?** Get the [CopilotBot Windows installer](https://github.com/paguilar1227/copilotbot/releases/latest) and follow the [first-time setup guide](copilotbot/README.md#windows-installer). It includes GitHub Copilot and Open Brain Lite. The documentation below describes the original OpenMausBot project.
 
 <div align="center">
 
