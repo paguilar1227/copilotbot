@@ -3,8 +3,13 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'copilotbot/windows/**'
-      - 'copilotbot/package.mjs'
+      - 'copilotbot/**'
+      - 'server/**'
+      - 'src/**'
+      - 'shared/**'
+      - 'electron/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/copilotbot-windows.yml'
 permissions:
   contents: read
