@@ -8,7 +8,9 @@ if ($Dependency -eq 'desktop') {
   exit 0
 }
 if ($Dependency -eq 'wsl') {
-  $process = Start-Process -FilePath "$env:WINDIR\System32\wsl.exe" -ArgumentList '--install','--no-distribution' -Verb RunAs -Wait -PassThru
+  & "$env:WINDIR\System32\wsl.exe" --status *> $null
+  $arguments = if ($LASTEXITCODE -eq 0) { @('--update') } else { @('--install', '--no-distribution') }
+  $process = Start-Process -FilePath "$env:WINDIR\System32\wsl.exe" -ArgumentList $arguments -Verb RunAs -Wait -PassThru
   if ($process.ExitCode -notin @(0, 3010)) { throw "WSL installation returned $($process.ExitCode)." }
   exit $process.ExitCode
 }
