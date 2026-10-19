@@ -15,7 +15,7 @@ if (!existsSync(archive) || createHash('sha256').update(readFileSync(archive)).d
   if (createHash('sha256').update(data).digest('hex') !== sha256) throw new Error('Copilot archive checksum mismatch');
   writeFileSync(archive, data);
 }
-execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:COPILOT_ARCHIVE -DestinationPath $env:COPILOT_DEST -Force'], { env: { ...process.env, COPILOT_ARCHIVE: archive, COPILOT_DEST: destination }, stdio: 'inherit' });
+execFileSync('tar.exe', ['-xf', archive, '-C', destination], { stdio: 'inherit' });
 const output = execFileSync(join(destination, 'copilot.exe'), ['--version'], { encoding: 'utf8' });
 if (!output.includes(version)) throw new Error('Bundled Copilot version verification failed');
 writeFileSync(join(destination, 'provenance.json'), JSON.stringify({ version, sha256, source: 'https://github.com/github/copilot-cli' }, null, 2));

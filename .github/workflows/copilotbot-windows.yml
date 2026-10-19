@@ -8,6 +8,7 @@ on:
       - 'src/**'
       - 'shared/**'
       - 'electron/**'
+      - 'scripts/prepare-cua-win.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/copilotbot-windows.yml'
@@ -32,6 +33,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts src/copilotbot/OpenBrainSetup.test.ts
+      - name: Regression - extract and run the official Windows CUA archive
+        run: pnpm build:cua:win
       - name: Package one installer with Copilot and Open Brain
         run: node copilotbot/package.mjs --win
         env:
