@@ -15,12 +15,20 @@ export function OpenBrainDialog({ onClose, threadId }: { onClose(): void; thread
   const [pending, setPending] = useState(0);
   useEffect(() => {
     let active = true;
-    void Promise.all([api('/api/plugins'), api(`/api/copilotbot/open-brain?threadId=${encodeURIComponent(threadId ?? '')}`)]).then(([plugins, state]) => {
-      if (!active) return;
-      setPlugin(plugins.plugins.find((p: PluginListing) => p.manifest.id === 'open-brain-lite'));
-      setLink(state.link?.id); setPending(state.pending ?? 0); setError(state.error ?? '');
+    let request = 0;
+    void api('/api/plugins').then(plugins => {
+      if (active) setPlugin(plugins.plugins.find((p: PluginListing) => p.manifest.id === 'open-brain-lite'));
     }).catch(cause => { if (active) setError(String(cause)); });
-    return () => { active = false; };
+    const refresh = () => {
+      const current = ++request;
+      return api(`/api/copilotbot/open-brain?threadId=${encodeURIComponent(threadId ?? '')}`).then(state => {
+        if (!active || current !== request) return;
+        setLink(state.link?.id); setPending(state.pending ?? 0); setError(state.error ?? '');
+      }).catch(cause => { if (active && current === request) setError(String(cause)); });
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 2000);
+    return () => { active = false; window.clearInterval(interval); };
   }, [threadId]);
   const page = plugin?.manifest.pages.find(page => page.webApp);
   return createPortal(<div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Open Brain" className="fixed inset-0 z-50 flex flex-col bg-app text-ink">
