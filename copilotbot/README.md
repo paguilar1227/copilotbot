@@ -78,7 +78,7 @@ Downstream implementation lives in `server/copilotbot/`, `src/copilotbot/`, `sha
 
 Check the hook files with `git diff upstream/main --stat`. Re-run the existing Live controller, credential storage, ACP authentication, and OpenAI chat regression suites when merging upstream changes to these areas. Run a separate read-only review and an isolated UI fixture before publishing. Tests use fake CLIs and fake audio; they do not prove a real microphone or access to a particular Azure deployment.
 
-The upstream Apache-2.0 license and NOTICE remain in place. The separately licensed `enterprise/` directory is preserved as upstream source; this project does not change its license checks or grant rights to redistribute or operate enterprise features.
+The upstream Apache-2.0 license and NOTICE remain in place. The unmodified bundled GitHub Copilot CLI is separately licensed under `third_party/github-copilot-cli/LICENSE.md`. The separately licensed `enterprise/` directory is preserved as upstream source; this project does not change its license checks or grant rights to redistribute or operate enterprise features.
 
 ## Native iPhone companion
 

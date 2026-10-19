@@ -9,6 +9,7 @@ on:
       - 'shared/**'
       - 'electron/**'
       - 'scripts/prepare-cua-win.mjs'
+      - 'third_party/github-copilot-cli/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/copilotbot-windows.yml'

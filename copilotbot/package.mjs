@@ -64,7 +64,7 @@ const brainRuntime = join(root, 'release-copilotbot', 'open-brain-runtime');
 if (!existsSync(join(brainSource, 'scripts/export-runtime.mjs'))) throw new Error('Set OPEN_BRAIN_SOURCE to the authoritative Open Brain Lite checkout.');
 const exportedBrain = spawnSync(process.execPath, [join(brainSource, 'scripts/export-runtime.mjs'), brainRuntime], { cwd: brainSource, stdio: 'inherit' });
 if (exportedBrain.status !== 0) throw new Error('Open Brain runtime export failed');
-config.extraResources.push({ from: brainRuntime, to: 'open-brain-runtime' });
+config.extraResources.push({ from: brainRuntime, to: 'open-brain-runtime' }, { from: 'third_party/github-copilot-cli/LICENSE.md', to: 'licenses/github-copilot-cli-LICENSE.md' });
 const buildConfig = join(root, 'release-copilotbot', 'build-config.json');
 mkdirSync(join(root, 'release-copilotbot'), { recursive: true });
 writeFileSync(buildConfig, JSON.stringify(config, null, 2));
