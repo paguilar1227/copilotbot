@@ -67,7 +67,7 @@ if (process.env.BRAIN_TEST_MODELS_VOLUME) {
   assert(/^[a-zA-Z0-9_.-]+$/.test(volume));
   for (const directory of [previous, next, bad]) {
     const file = join(directory, 'docker-compose.yml');
-    const compose = readFileSync(file, 'utf8').replace('- models:/root/.ollama', '- shared-models:/root/.ollama:ro');
+    const compose = readFileSync(file, 'utf8').replace('- models:/root/.ollama', '- models:/root/.ollama\n      - type: volume\n        source: shared-models\n        target: /root/.ollama/models/blobs\n        read_only: true\n        volume:\n          subpath: models/blobs');
     writeFileSync(file, compose + '\n  shared-models:\n    external: true\n    name: ' + volume + '\n');
   }
 }
@@ -133,6 +133,7 @@ try {
   if (interactive) { console.log('PROOF COMPLETE; stop the process to close the isolated fixture.'); await new Promise(resolve => process.once('SIGINT', resolve)); }
 } finally {
   cpSync(join(child.info.dataDir, 'open-brain/runtime.log'), join(output, 'runtime.log'));
+  try { writeFileSync(join(output, 'containers.log'), execFileSync(docker, ['compose', '--project-name', project, '-f', join(previous, 'docker-compose.yml'), '--env-file', join(child.info.dataDir, 'open-brain/runtime.env'), 'logs', '--no-color'], { encoding: 'utf8' })); } catch { /* Preserve the original test failure if container logs are unavailable. */ }
   cpSync(join(child.info.dataDir, 'open-brain/runtime.env'), join(workspace, 'cleanup.env'));
   await child.close(); releaseServer.close();
   dockerRun(['compose', '--project-name', project, '-f', join(previous, 'docker-compose.yml'), '--env-file', join(workspace, 'cleanup.env'), 'down', '--volumes']);
