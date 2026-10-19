@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import * as tar from 'tar';
@@ -19,7 +19,7 @@ execFileSync(process.execPath, [join(brain, 'scripts/export-runtime.mjs'), previ
 const identity = (directory: string, version: string, revision: string) => writeFileSync(join(directory, 'runtime.json'), JSON.stringify({ version, revision, apiVersion: 1 }));
 identity(previous, '0.1.0', '0'.repeat(40)); cpSync(previous, next, { recursive: true }); identity(next, '0.1.1', '1'.repeat(40));
 cpSync(next, bad, { recursive: true }); identity(bad, '0.1.2', '2'.repeat(40));
-writeFileSync(join(bad, 'scripts/fail-upgrade.cjs'), "const {Client}=require('pg'); (async()=>{const db=new Client({connectionString:process.env.DATABASE_URL});await db.connect();await db.query(\"UPDATE todos SET content='broken migration'\");require('fs').writeFileSync('/data/bad-upgrade','corrupt');await db.end();process.exit(1)})()");
+writeFileSync(join(bad, 'scripts/fail-upgrade.cjs'), "const {Client}=require('pg'); (async()=>{const db=new Client({connectionString:process.env.DATABASE_URL});await db.connect();await db.query(\"UPDATE todos SET content='broken migration'\");require('fs').writeFileSync('/data/bad-upgrade','corrupt');require('fs').writeFileSync('/proof/mutated','database and files changed');await db.end();process.exit(1)})()");
 writeFileSync(join(bad, 'Dockerfile'), readFileSync(join(bad, 'Dockerfile'), 'utf8') + '\nCOPY scripts/fail-upgrade.cjs scripts/fail-upgrade.cjs\nCMD ["node", "scripts/fail-upgrade.cjs"]\n');
 const packages: Record<string, { bytes: Buffer; manifest: Record<string, unknown> }> = {};
 let offered = '0.1.1', feed = '';
@@ -73,7 +73,7 @@ if (process.env.BRAIN_TEST_MODELS_VOLUME) {
 }
 for (const directory of [previous, next, bad]) {
   const compose = join(directory, 'docker-compose.yml');
-  writeFileSync(compose, readFileSync(compose, 'utf8').replace('LLM_PROVIDER: ${LLM_PROVIDER:-}', 'LLM_PROVIDER: stub'));
+  writeFileSync(compose, readFileSync(compose, 'utf8').replace('LLM_PROVIDER: ${LLM_PROVIDER:-}', 'LLM_PROVIDER: stub').replace('- files:/data', '- files:/data\n      - migration-proof:/proof') + '\n  migration-proof:\n');
 }
 for (const [version, directory] of [['0.1.1', next], ['0.1.2', bad]]) {
   const path = join(workspace, version + '.tar.gz'); await tar.c({ gzip: true, file: path, cwd: directory }, ['.']);
@@ -83,6 +83,10 @@ for (const [version, directory] of [['0.1.1', next], ['0.1.2', bad]]) {
 const child = await launchVerificationServer({}, undefined, undefined, undefined, undefined, undefined, [], undefined, join(root, 'dist'), {
   source: previous, endpoint, feed: feed + '/release', project, dockerBin: dirname(docker), dockerHost,
 });
+const runtimeLog = join(child.info.dataDir, 'open-brain/runtime.log');
+let logOffset = 0;
+const printRuntimeLog = () => { if (existsSync(runtimeLog)) { const bytes = readFileSync(runtimeLog); if (bytes.length > logOffset) process.stdout.write(bytes.subarray(logOffset)); logOffset = bytes.length; } };
+const logWatcher = watch(dirname(runtimeLog), printRuntimeLog); printRuntimeLog();
 const request = async (path: string, body?: unknown) => {
   const response = await fetch(child.info.url + path, { method: body === undefined ? 'GET' : 'POST', headers: { origin: child.info.url, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   assert(response.ok, path + ': ' + response.status + ' ' + await response.clone().text()); return response.json() as Promise<any>;
@@ -92,7 +96,8 @@ const brainRequest = async (path: string, body?: unknown) => {
   assert(response.ok, path + ': ' + response.status + ' ' + await response.clone().text()); return response.json() as Promise<any>;
 };
 const waitFor = async (predicate: () => Promise<boolean>) => { while (!await predicate()) await new Promise(resolve => setTimeout(resolve, 1000)); };
-const status = () => request('/api/copilotbot/open-brain/setup');
+let previousStatus = '';
+const status = async () => { const state = await request('/api/copilotbot/open-brain/setup'); const text = JSON.stringify(state); if (text !== previousStatus) console.log('BRAIN_STATE ' + text); previousStatus = text; return state; };
 const interactive = process.argv.includes('--interactive');
 const receipt: Record<string, unknown> = { project, endpoint, app: child.info.url, checks: [] };
 const checkpoint = (name: string) => { (receipt.checks as string[]).push(name); writeFileSync(join(output, 'receipt.json'), JSON.stringify(receipt, null, 2)); console.log(name); };
@@ -131,11 +136,13 @@ try {
   assert.equal((await brainRequest('/content/' + later.id)).item.title, 'After upgrade'); checkpoint('undo rollback recovered the newer note');
   offered = '0.1.2'; await request('/api/copilotbot/open-brain/setup/check', {});
   await waitFor(async () => (await status()).updates.available?.version === '0.1.2');
-  await action('update'); await waitFor(async () => (await status()).updates.phase === 'failed' && !(await status()).busy);
+  await action('update'); await waitFor(async () => { const state = await status(); if (state.busy) return false; assert.equal(state.updates.phase, 'failed', 'The failed migration must finish with automatic recovery: ' + JSON.stringify(state)); return true; });
+  assert.equal(execFileSync(docker, ['compose', '--project-name', project, '--env-file', join(child.info.dataDir, 'open-brain/runtime.env'), '-f', join(previous, 'docker-compose.yml'), 'exec', '-T', 'app', 'cat', '/proof/mutated'], { encoding: 'utf8' }), 'database and files changed', 'The failed candidate must actually run its corrupting migration.');
   await verify(); assert.equal((await brainRequest('/content/' + later.id)).item.title, 'After upgrade');
   assert.equal((await status()).updates.current.version, '0.1.1'); checkpoint('failed migration automatically restored the database, files and runtime');
   if (interactive) { console.log('PROOF COMPLETE; stop the process to close the isolated fixture.'); await new Promise(resolve => process.once('SIGINT', resolve)); }
 } finally {
+  logWatcher.close(); printRuntimeLog();
   cpSync(join(child.info.dataDir, 'open-brain/runtime.log'), join(output, 'runtime.log'));
   try { writeFileSync(join(output, 'containers.log'), execFileSync(docker, ['compose', '--project-name', project, '-f', join(previous, 'docker-compose.yml'), '--env-file', join(child.info.dataDir, 'open-brain/runtime.env'), 'logs', '--no-color'], { encoding: 'utf8' })); } catch { /* Preserve the original test failure if container logs are unavailable. */ }
   cpSync(join(child.info.dataDir, 'open-brain/runtime.env'), join(workspace, 'cleanup.env'));

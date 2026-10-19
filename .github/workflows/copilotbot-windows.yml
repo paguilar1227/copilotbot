@@ -9,6 +9,8 @@ on:
       - 'shared/**'
       - 'electron/**'
       - 'scripts/prepare-cua-win.mjs'
+      - 'scripts/testing/verify-open-brain-updates.ts'
+      - 'scripts/sync-open-brain-release.ts'
       - 'third_party/github-copilot-cli/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
