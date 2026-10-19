@@ -1,0 +1,51 @@
+name: Track Open Brain releases
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: open-brain-release-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: release
+        run: node --experimental-strip-types scripts/sync-open-brain-release.ts
+      - name: Open the update PR and run installer checks
+        if: steps.release.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          branch="automation/open-brain-$VERSION"
+          if test -n "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')"; then
+            echo "An update PR is already open."
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          if git ls-remote --exit-code --heads origin "$branch"; then
+            git restore copilotbot/open-brain-version.json copilotbot/version.json
+            git fetch origin "$branch"
+            git checkout -b "$branch" FETCH_HEAD
+          else
+            git switch -c "$branch"
+            git add copilotbot/open-brain-version.json copilotbot/version.json
+            git commit -m "Update Open Brain to $VERSION"
+            git push origin "$branch"
+          fi
+          printf '%s\n' "Updates the pinned shared Open Brain runtime and increments the desktop installer version. Installer and update/rollback checks run on this branch before merge." > "$RUNNER_TEMP/brain-pr.md"
+          gh pr create --base main --head "$branch" --title "Update Open Brain to $VERSION" --body-file "$RUNNER_TEMP/brain-pr.md"
+          gh workflow run copilotbot-windows.yml --ref "$branch"

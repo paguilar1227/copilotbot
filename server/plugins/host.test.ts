@@ -213,3 +213,23 @@ describe('Open Brain Lite extension and authenticated routes', () => {
     expect(listLibrarySkills().find(skill => skill.name === 'open-brain-lite')?.enabled).toBe(true);
   });
 });
+
+it('blocks Open Brain commands and direct service requests during maintenance and resumes afterward', async () => {
+  let available = true, writes = 0;
+  const endpoint = await listen(createServer(async (req, res) => {
+    if (req.method === 'POST') writes++;
+    json(res, 200, { ok: true });
+  }));
+  const instance = new PluginHost(temporary(), () => {}, undefined, id => id !== 'open-brain-lite' || available);
+  hosts.push(instance);
+  await instance.install(resolve('plugins/open-brain-lite'));
+  await instance.configure('open-brain-lite', { endpoint });
+  await instance.enable('open-brain-lite', true); await ready(instance, 'open-brain-lite');
+  available = false;
+  await expect(instance.invoke('open-brain-lite', 'capture-note', { projectId: '11111111-1111-4111-8111-111111111111', title: 'Must wait', content: 'Keep this out of the snapshot window' })).rejects.toMatchObject({ status: 503 });
+  await expect(instance.requestService('open-brain-lite', 'brain', '/api/v1/content', { method: 'POST' })).rejects.toMatchObject({ status: 503 });
+  expect(writes).toBe(0);
+  available = true;
+  await instance.invoke('open-brain-lite', 'capture-note', { projectId: '11111111-1111-4111-8111-111111111111', title: 'Resume', content: 'Now the update is finished' });
+  expect(writes).toBe(1);
+});

@@ -2,10 +2,11 @@ import { Readable } from 'node:stream';
 import type { PluginHost } from './host.ts';
 import { PASS, type RouteHandler } from '../routes/table.ts';
 
-export function webAppRoutes(host: PluginHost, sessionLive: (id: string) => boolean): RouteHandler {
+export function webAppRoutes(host: PluginHost, sessionLive: (id: string) => boolean, unavailable: (pluginId: string) => boolean = () => false): RouteHandler {
   return async ({ path, url, req, res, method, auth, json }) => {
     const match = /^\/api\/plugins\/([a-z][a-z0-9-]*)\/web\/([a-z][a-z0-9-]*)\/(.*)$/.exec(path);
     if (!match) return PASS;
+    if (unavailable(match[1])) return json(res, 503, { error: 'Open Brain is being updated. Try again when the update finishes.' });
     if (!auth.scopes.includes('admin')) return json(res, 403, { error: 'Open Brain requires owner access.' });
     try {
       const plugin = host.list().find(plugin => plugin.manifest.id === match[1]);

@@ -75,11 +75,12 @@ export class PluginHost {
   private root: string;
   private changed: () => void;
   private workerPath?: URL;
+  private readonly serviceAvailable: (id: string) => boolean;
   error?: string;
   private mutation: Promise<unknown> = Promise.resolve();
-  constructor(root: string, changed: () => void = () => {}, workerPath?: URL) {
+  constructor(root: string, changed: () => void = () => {}, workerPath?: URL, serviceAvailable: (id: string) => boolean = () => true) {
     this.root = root; this.changed = changed;
-    this.workerPath = workerPath;
+    this.workerPath = workerPath; this.serviceAvailable = serviceAvailable;
     this.index = join(root, 'plugins.json');
   }
 
@@ -255,6 +256,7 @@ export class PluginHost {
   }
 
   private serviceUrl(plugin: Loaded, name: string, path: string): URL {
+    if (!this.serviceAvailable(plugin.manifest.id)) throw Object.assign(new Error('This service is updating or requires recovery. Try again after recovery finishes.'), { status: 503 });
     const service = plugin.manifest.services[name];
     if (!service || typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) throw new Error('Unknown service or invalid service path');
     const base = new URL(String(plugin.installation.settings[service.urlSetting]));
@@ -274,6 +276,7 @@ export class PluginHost {
   }
 
   async invoke(id: string, command: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+    if (!this.serviceAvailable(id)) throw Object.assign(new Error('This service is updating or requires recovery.'), { status: 503 });
     const plugin = this.get(id), runtime = plugin.runtime;
     if (!plugin.installation.enabled || !runtime || runtime.status !== 'ready') throw Object.assign(new Error('Plugin is not ready. Enable it or check its status.'), { status: 409 });
     if (!plugin.manifest.commands.some(row => row.id === command)) throw Object.assign(new Error('Unknown plugin command'), { status: 404 });

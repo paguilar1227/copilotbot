@@ -13679,7 +13679,7 @@ const cloudMoveRoutes = createCloudMoveRoutes({
 // `workspaceAccess` is assigned at boot, after this line: read it per request.
 let openBrain: OpenBrainIntegration | undefined;
 let brainRuntime: OpenBrainRuntime | undefined;
-const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => broadcast({ kind: 'config', ...configStatus() }), new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url));
+const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => broadcast({ kind: 'config', ...configStatus() }), new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url), id => id !== 'open-brain-lite' || !brainRuntime?.unavailableForWrites());
 const bundledPlugins = process.env.OMB_PLUGINS_DIR || fileURLToPath(new URL('../plugins/', import.meta.url));
 if (CLOUD_HOME || HOSTED_WORKSPACE) appPlugins.error = 'App extensions are available in self-hosted workspaces.';
 else await appPlugins.start(discoverPlugins(bundledPlugins));
@@ -13687,10 +13687,13 @@ if (!CLOUD_HOME && !HOSTED_WORKSPACE && process.env.OMB_OPEN_BRAIN_ENABLED !== '
   if (process.env.OMB_OPEN_BRAIN_URL) await appPlugins.configure('open-brain-lite', { endpoint: process.env.OMB_OPEN_BRAIN_URL });
   const firstUse = !existsSync(join(DATA_DIR, 'open-brain', 'state.json'));
   if (firstUse) await appPlugins.enable('open-brain-lite', true);
-  openBrain = new OpenBrainIntegration(join(DATA_DIR, 'open-brain'), store, (path, options) => appPlugins.requestService('open-brain-lite', 'brain', path, options), () => broadcast({ kind: 'config', ...configStatus() }));
+  openBrain = new OpenBrainIntegration(join(DATA_DIR, 'open-brain'), store, (path, options) => appPlugins.requestService('open-brain-lite', 'brain', path, options), () => broadcast({ kind: 'config', ...configStatus() }), () => !brainRuntime?.unavailableForWrites());
   const runtimeSource = process.env.OMB_OPEN_BRAIN_RUNTIME ?? (process.env.OMB_RESOURCES_PATH ? join(process.env.OMB_RESOURCES_PATH, 'open-brain-runtime') : undefined);
   const endpoint = String(appPlugins.get('open-brain-lite').installation.settings.endpoint);
-  brainRuntime = new OpenBrainRuntime({ endpoint, source: runtimeSource, data: join(DATA_DIR, 'open-brain'), resources: process.env.OMB_RESOURCES_PATH });
+  brainRuntime = new OpenBrainRuntime({ endpoint, source: runtimeSource, data: join(DATA_DIR, 'open-brain'), resources: process.env.OMB_RESOURCES_PATH,
+    projectName: process.env.OMB_OPEN_BRAIN_PROJECT, releaseFeed: process.env.OMB_OPEN_BRAIN_RELEASE_FEED,
+    maintenance: action => openBrain!.withPaused(action),
+  });
   void brainRuntime.start().then(() => openBrain?.sync());
   store.onChange(change => { if (change.type === 'bot' || change.type === 'group' || change.type === 'sections') void openBrain?.sync(); });
 }
@@ -13702,6 +13705,9 @@ ROUTES.push(async ({ path, url, method, auth, res, json }) => {
     if (!brainRuntime) return json(res, 409, { error: 'Open Brain is not configured.' });
     const action = path.slice('/api/copilotbot/open-brain/setup/'.length);
     if (action === 'start') void brainRuntime.start().then(() => openBrain?.sync());
+    else if (action === 'check') void brainRuntime.checkForUpdates();
+    else if (action === 'update') void brainRuntime.update().then(() => openBrain?.sync());
+    else if (action === 'rollback') void brainRuntime.rollback().then(() => openBrain?.sync());
     else if (action === 'docker' || action === 'wsl' || action === 'desktop') void brainRuntime.install(action);
     else return json(res, 400, { error: 'Unknown setup action' });
     return json(res, 202, brainRuntime.status());
@@ -13710,7 +13716,7 @@ ROUTES.push(async ({ path, url, method, auth, res, json }) => {
   if (path === '/api/copilotbot/open-brain/retry' && method === 'POST') { await openBrain?.sync(); return json(res, 200, openBrain?.status()); }
   return json(res, 404, { error: 'Not found' });
 });
-ROUTES.push(webAppRoutes(appPlugins, id => sessions.isLive(id)));
+ROUTES.push(webAppRoutes(appPlugins, id => sessions.isLive(id), id => id === 'open-brain-lite' && Boolean(brainRuntime?.unavailableForWrites())));
 ROUTES.push(pluginRoutes(appPlugins));
 ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && entitled("admin") }));
 const orgInstallStatuses = () => orgLibrary?.installStatuses() ?? new Map();

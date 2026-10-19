@@ -30,11 +30,12 @@ export class OpenBrainIntegration {
   private queue: Promise<unknown> = Promise.resolve();
   private readonly projects: WorkspaceProjects;
   private readonly changed: () => void;
+  private readonly available: () => boolean;
   error?: string;
   private syncing?: Promise<void>;
   private syncAgain = false;
-  constructor(directory: string, store: Store, request: Request, changed: () => void = () => {}) {
-    this.directory = directory; this.file = join(directory, 'state.json'); this.store = store; this.request = request; this.changed = changed;
+  constructor(directory: string, store: Store, request: Request, changed: () => void = () => {}, available: () => boolean = () => true) {
+    this.directory = directory; this.file = join(directory, 'state.json'); this.store = store; this.request = request; this.changed = changed; this.available = available;
     this.projects = new WorkspaceProjects(join(directory, '..', 'copilotbot', 'projects.json'));
     this.state = existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : { version: 1, installation: randomUUID(), links: {}, projects: {}, pending: [] };
     if (this.state.version !== 1 || !this.state.links || !this.state.projects || !Array.isArray(this.state.pending)) throw new Error('Open Brain integration state is invalid; restore it before continuing.');
@@ -43,6 +44,7 @@ export class OpenBrainIntegration {
   private save() { mkdirSync(this.directory, { recursive: true, mode: 0o700 }); writeFileAtomic(this.file, JSON.stringify(this.state), { mode: 0o600 }); }
   private serial<T>(action: () => Promise<T>): Promise<T> { const next = this.queue.then(action); this.queue = next.catch(() => {}); return next; }
   private async json(path: string, method = 'GET', body?: unknown): Promise<any> {
+    if (!this.available()) throw new Error('Open Brain is updating or requires recovery. Capture retained locally.');
     const response = await this.request(path, { method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
     if (!response.ok) throw new Error(`Open Brain returned HTTP ${response.status}`);
     return response.json();
@@ -108,6 +110,7 @@ export class OpenBrainIntegration {
       Object.assign(project, (await this.json(`/api/v1/projects/${project.id}`, 'PUT', { status: 'archived' })).project);
     }
   }
+  withPaused<T>(action: () => Promise<T>) { return this.serial(action); }
   status() { return { configured: true, error: this.error, pending: this.state.pending.length, sessions: Object.keys(this.state.links).length }; }
   link(threadId: string) { return this.state.links[threadId]; }
   sync(): Promise<void> {

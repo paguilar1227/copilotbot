@@ -21,11 +21,22 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - id: brain
+        shell: pwsh
+        run: '"revision=$((Get-Content copilotbot/open-brain-version.json | ConvertFrom-Json).revision)" >> $env:GITHUB_OUTPUT'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: paguilar1227/open-brain-lite
-          ref: 1082ebd9e3ddfe0f541a68b8be1799c1486bd15b
+          ref: ${{ steps.brain.outputs.revision }}
           path: open-brain-source
+      - id: legacy
+        shell: pwsh
+        run: '"revision=$((Get-Content copilotbot/open-brain-legacy.json | ConvertFrom-Json).revision)" >> $env:GITHUB_OUTPUT'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: paguilar1227/open-brain-lite
+          ref: ${{ steps.legacy.outputs.revision }}
+          path: open-brain-legacy-source
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -33,7 +44,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts
+      - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/copilotbot/open-brain-release-sync.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts
       - name: Regression - WSL setup under Windows PowerShell 5.1
         shell: powershell
         run: ./copilotbot/windows/setup-dependency.test.ps1
@@ -43,6 +54,7 @@ jobs:
         run: node copilotbot/package.mjs --win
         env:
           OPEN_BRAIN_SOURCE: ${{ github.workspace }}/open-brain-source
+          OPEN_BRAIN_LEGACY_SOURCE: ${{ github.workspace }}/open-brain-legacy-source
       - name: Verify the bundled browser
         run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release-copilotbot/win-unpacked/resources"
       - name: Verify the packaged server
@@ -56,7 +68,7 @@ jobs:
           $destination = Join-Path $env:RUNNER_TEMP 'CopilotBot Clean Install'
           $process = Start-Process $installer -ArgumentList '/S', "/D=$destination" -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw "NSIS failed: $($process.ExitCode)" }
-          @('CopilotBot.exe', 'resources/server/index.js', 'resources/ui/index.html', 'resources/copilot-cli/copilot.exe', 'resources/powershell/pwsh.exe', 'resources/licenses/github-copilot-cli-LICENSE.md', 'resources/open-brain-runtime/docker-compose.yml', 'resources/copilotbot-setup/setup-dependency.ps1', 'resources/plugins/open-brain-lite/plugin.json') | ForEach-Object {
+          @('CopilotBot.exe', 'resources/server/index.js', 'resources/ui/index.html', 'resources/copilot-cli/copilot.exe', 'resources/powershell/pwsh.exe', 'resources/licenses/github-copilot-cli-LICENSE.md', 'resources/open-brain-runtime/docker-compose.yml', 'resources/open-brain-runtime-previous/runtime.json', 'resources/copilotbot-setup/setup-dependency.ps1', 'resources/plugins/open-brain-lite/plugin.json') | ForEach-Object {
             if (-not (Test-Path (Join-Path $destination $_))) { throw "Missing installed file: $_" }
           }
           & "$destination/resources/powershell/pwsh.exe" -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
@@ -72,3 +84,63 @@ jobs:
             release-copilotbot/*-windows-x64-setup.exe
             release-copilotbot/SHA256SUMS.txt
           if-no-files-found: error
+
+  update-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - id: brain
+        run: echo "revision=$(node -p "require('./copilotbot/open-brain-version.json').revision")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: paguilar1227/open-brain-lite
+          ref: ${{ steps.brain.outputs.revision }}
+          path: open-brain-source
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Verify real update, rollback and failed migration recovery
+        run: node --experimental-strip-types scripts/testing/verify-open-brain-updates.ts
+        env:
+          OPEN_BRAIN_SOURCE: ${{ github.workspace }}/open-brain-source
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: open-brain-update-acceptance
+          path: scratch/open-brain-update-proof
+
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build, update-acceptance]
+    concurrency:
+      group: copilotbot-installer-publish
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@v4
+        with:
+          name: copilotbot-windows-installer
+          path: installer
+      - name: Publish the tested installer once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./copilotbot/version.json').version")
+          tag="v$version"
+          if gh release view "$tag" --json isDraft --jq '.isDraft' > "$RUNNER_TEMP/draft"; then
+            if test "$(cat "$RUNNER_TEMP/draft")" = false; then
+              echo "This version is already published; preserving its original installer."
+              exit 0
+            fi
+          else
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Tested Windows installer with the shared Open Brain runtime, in-app updates, local backups, and rollback. Requires Windows 11 x64 with Docker/WSL. The installer is currently unsigned."
+          fi
+          gh release upload "$tag" installer/* --clobber
+          gh release edit "$tag" --draft=false --latest
