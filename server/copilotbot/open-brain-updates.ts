@@ -11,7 +11,7 @@ interface Saved { active?: { source: string } & BrainVersion; bundledRevision?: 
 export interface BrainUpdateStatus { current?: BrainVersion; available?: BrainVersion; checking: boolean; phase: string; message?: string; rollback?: { version: string; createdAt: string }; recoveryRequired: boolean }
 interface Options {
   data: string; bundled: string; previous?: string; projectName: string; run: RuntimeRun;
-  boot: (source: string) => Promise<void>; changed: () => void;
+  boot: (source: string, recovery?: boolean) => Promise<void>; changed: () => void;
   maintenance: <T>(action: () => Promise<T>) => Promise<T>;
   feed?: string;
 }
@@ -128,7 +128,7 @@ export class OpenBrainUpdates {
     await this.compose(source, ['exec', '-T', 'db', 'pg_restore', '-U', 'openbrain', '-d', 'openbrain', '--no-owner', '--no-acl', '--exit-on-error'], { input: join(directory, 'database.dump') });
     await this.compose(source, ['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'app', '-c', 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} + && tar -xf - -C /data'], { input: join(directory, 'files.tar') });
     cpSync(join(directory, 'runtime.env'), join(this.options.data, 'runtime.env'));
-    await this.options.boot(source);
+    await this.options.boot(source, true);
     this.saved.active = { source, version: snapshot.version, revision: snapshot.revision };
   }
   private async exclusive<T>(action: () => Promise<T>) {
@@ -170,7 +170,7 @@ export class OpenBrainUpdates {
         this.progress('idle', 'Open Brain ' + release.version + ' is ready. The previous version and data are backed up.');
       } catch (error) {
         if (snapshot) { await this.restore(snapshot); delete this.saved.transaction; this.save(); }
-        else await this.options.boot(this.source);
+        else await this.options.boot(this.source, true);
         this.progress('failed', 'Update failed. The previous Open Brain version is running; its data was preserved.');
         throw error;
       }
@@ -190,7 +190,7 @@ export class OpenBrainUpdates {
         this.progress('idle', 'Previous Open Brain version restored. The state from before rollback is also backed up.');
       } catch (error) {
         if (current) { await this.restore(current); delete this.saved.transaction; this.save(); }
-        else await this.options.boot(this.source);
+        else await this.options.boot(this.source, true);
         this.progress('failed', 'Rollback failed. The state from before rollback was restored.');
         throw error;
       }

@@ -126,6 +126,8 @@ it.each([false, true])('protects existing data from a failing installer migratio
   expect(database).toBe('original session, note and task'); expect(files).toBe('original artifact bytes');
   expect(calls.some(args => args.includes('pg_dump'))).toBe(true);
   expect(calls.some(args => args.includes('pg_restore'))).toBe(true);
+  const recoveryCheck = calls.filter(args => args.includes('scripts/verify-models.mjs')).at(-1)!;
+  expect(recoveryCheck).not.toContain('--pull');
   // Reopening the same installer must not repeat a failed migration.
   const count = calls.filter(args => args.includes('pg_dump')).length;
   await new OpenBrainRuntime({ ...options, resources, run, healthy: async () => healthy }).start();
