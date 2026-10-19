@@ -97,7 +97,7 @@ export class OpenBrainRuntime {
     const script = join(this.options.resources, 'copilotbot-setup', 'setup-dependency.ps1');
     this.state.busy = true;
     this.pending = (async () => {
-      this.set('installing', dependency === 'wsl' ? 'Follow the Windows administrator prompt to enable WSL.' : 'Downloading the signed Docker installer. Finish its setup window and review its license.');
+      this.set('installing', dependency === 'desktop' ? 'Starting Docker Desktop…' : dependency === 'wsl' ? 'Follow the Windows administrator prompt to enable WSL.' : 'Downloading the signed Docker installer. Finish its setup window and review its license.');
       try {
         await this.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Dependency', dependency]);
         resetPathCache();

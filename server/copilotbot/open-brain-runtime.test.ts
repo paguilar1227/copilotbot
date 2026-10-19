@@ -77,3 +77,10 @@ it('retries model verification even when containers already answer health after 
   expect(restarted.status().phase).toBe('ready');
   expect(pulls).toBe(2);
 });
+
+it('recognizes Windows restart exit codes without calling setup a failure', async () => {
+  const run = vi.fn().mockRejectedValue(Object.assign(new Error('Restart required'), { code: 3010 }));
+  const runtime = new OpenBrainRuntime({ ...fixture(), run, healthy: async () => false });
+  await runtime.install('wsl');
+  expect(runtime.status()).toMatchObject({ phase: 'restart-required', busy: false });
+});
