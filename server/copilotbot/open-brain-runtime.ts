@@ -124,7 +124,8 @@ export class OpenBrainRuntime {
     if (!existsSync(envFile)) writeFileSync(envFile, `POSTGRES_PASSWORD=${randomBytes(24).toString('hex')}\nPORT=${new URL(endpoint).port || '3210'}\nBIND_ADDRESS=127.0.0.1\n`, { mode: 0o600 });
     const args = ['compose', '--project-name', this.options.projectName ?? 'copilotbot-brain', '--env-file', envFile, '-f', join(source!, 'docker-compose.yml')];
     this.set('starting', 'Preparing Open Brain and its local database. The first setup downloads containers and models; keep CopilotBot open.');
-    await this.run('docker', [...args, 'up', '-d', '--build', '--wait'], source);
+    await this.run('docker', [...args, 'build'], source);
+    await this.run('docker', [...args, 'up', '-d', '--force-recreate', '--wait', 'app'], source);
     await this.run('docker', [...args, 'exec', '-T', 'app', 'node', 'scripts/verify-models.mjs', '--pull'], source);
     if (!await this.healthy()) throw new Error('Open Brain health check failed');
     if (this.options.verify) await this.options.verify();

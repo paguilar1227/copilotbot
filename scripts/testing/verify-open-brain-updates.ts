@@ -19,7 +19,7 @@ execFileSync(process.execPath, [join(brain, 'scripts/export-runtime.mjs'), previ
 const identity = (directory: string, version: string, revision: string) => writeFileSync(join(directory, 'runtime.json'), JSON.stringify({ version, revision, apiVersion: 1 }));
 identity(previous, '0.1.0', '0'.repeat(40)); cpSync(previous, next, { recursive: true }); identity(next, '0.1.1', '1'.repeat(40));
 cpSync(next, bad, { recursive: true }); identity(bad, '0.1.2', '2'.repeat(40));
-writeFileSync(join(bad, 'scripts/fail-upgrade.cjs'), "const {Client}=require('pg'); (async()=>{const db=new Client({connectionString:process.env.DATABASE_URL});await db.connect();await db.query(\"UPDATE todos SET content='broken migration'\");require('fs').writeFileSync('/data/bad-upgrade','corrupt');await db.end();process.exit(1)})()");
+writeFileSync(join(bad, 'scripts/fail-upgrade.cjs'), "const {Client}=require('pg'); (async()=>{const db=new Client({connectionString:process.env.DATABASE_URL});await db.connect();await db.query(\"UPDATE todos SET content='broken migration'\");require('fs').writeFileSync('/data/bad-upgrade','corrupt');require('fs').writeFileSync('/proof/mutated','database and files changed');await db.end();process.exit(1)})()");
 writeFileSync(join(bad, 'Dockerfile'), readFileSync(join(bad, 'Dockerfile'), 'utf8') + '\nCOPY scripts/fail-upgrade.cjs scripts/fail-upgrade.cjs\nCMD ["node", "scripts/fail-upgrade.cjs"]\n');
 const packages: Record<string, { bytes: Buffer; manifest: Record<string, unknown> }> = {};
 let offered = '0.1.1', feed = '';
@@ -73,7 +73,7 @@ if (process.env.BRAIN_TEST_MODELS_VOLUME) {
 }
 for (const directory of [previous, next, bad]) {
   const compose = join(directory, 'docker-compose.yml');
-  writeFileSync(compose, readFileSync(compose, 'utf8').replace('LLM_PROVIDER: ${LLM_PROVIDER:-}', 'LLM_PROVIDER: stub'));
+  writeFileSync(compose, readFileSync(compose, 'utf8').replace('LLM_PROVIDER: ${LLM_PROVIDER:-}', 'LLM_PROVIDER: stub').replace('- files:/data', '- files:/data\n      - migration-proof:/proof') + '\n  migration-proof:\n');
 }
 for (const [version, directory] of [['0.1.1', next], ['0.1.2', bad]]) {
   const path = join(workspace, version + '.tar.gz'); await tar.c({ gzip: true, file: path, cwd: directory }, ['.']);
@@ -137,6 +137,7 @@ try {
   offered = '0.1.2'; await request('/api/copilotbot/open-brain/setup/check', {});
   await waitFor(async () => (await status()).updates.available?.version === '0.1.2');
   await action('update'); await waitFor(async () => { const state = await status(); if (state.busy) return false; assert.equal(state.updates.phase, 'failed', 'The failed migration must finish with automatic recovery: ' + JSON.stringify(state)); return true; });
+  assert.equal(execFileSync(docker, ['compose', '--project-name', project, '--env-file', join(child.info.dataDir, 'open-brain/runtime.env'), '-f', join(previous, 'docker-compose.yml'), 'exec', '-T', 'app', 'cat', '/proof/mutated'], { encoding: 'utf8' }), 'database and files changed', 'The failed candidate must actually run its corrupting migration.');
   await verify(); assert.equal((await brainRequest('/content/' + later.id)).item.title, 'After upgrade');
   assert.equal((await status()).updates.current.version, '0.1.1'); checkpoint('failed migration automatically restored the database, files and runtime');
   if (interactive) { console.log('PROOF COMPLETE; stop the process to close the isolated fixture.'); await new Promise(resolve => process.once('SIGINT', resolve)); }

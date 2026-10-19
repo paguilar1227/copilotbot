@@ -34,15 +34,16 @@ describe('first-time Open Brain runtime', () => {
     const run = vi.fn(async (_command: string, args: string[]) => { if (args.includes('--pull')) live = true; });
     const runtime = new OpenBrainRuntime({ ...options, run, healthy: async () => live });
     await Promise.all([runtime.start(), runtime.start()]);
-    expect(run).toHaveBeenCalledTimes(4);
+    expect(run).toHaveBeenCalledTimes(5);
     const active = JSON.parse(readFileSync(join(options.data, 'updates.json'), 'utf8')).active.source;
     expect(active).not.toBe(options.source);
     expect(run.mock.calls[2]?.[1]).toContain(join(active, 'docker-compose.yml'));
+    expect(run.mock.calls[3]?.[1]).toEqual(expect.arrayContaining(['up', '--force-recreate', '--wait', 'app']));
     expect(runtime.status()).toMatchObject({ phase: 'ready', busy: false });
     const env = readFileSync(join(options.data, 'runtime.env'), 'utf8');
     await runtime.start();
     expect(readFileSync(join(options.data, 'runtime.env'), 'utf8')).toBe(env);
-    expect(run).toHaveBeenCalledTimes(4);
+    expect(run).toHaveBeenCalledTimes(5);
   });
   it('does not report success after a failed model download and can retry', async () => {
     let fail = true, live = false;
@@ -103,7 +104,7 @@ it.each([false, true])('protects existing data from a failing installer migratio
     if (args.includes('dropdb')) database = '';
     if (args.includes('pg_restore')) database = readFileSync(streams!.input!, 'utf8');
     if (streams?.input?.endsWith('files.tar')) files = readFileSync(streams.input, 'utf8');
-    if (args.includes('--build')) {
+    if (args.includes('--force-recreate')) {
       const source = args[args.indexOf('-f') + 1]!.replace(/[\\/]docker-compose.yml$/, '');
       const version = JSON.parse(readFileSync(join(source, 'runtime.json'), 'utf8')).version;
       if (version === '0.1.1') { database = 'partially migrated'; files = 'changed files'; throw new Error('injected migration failure'); }
