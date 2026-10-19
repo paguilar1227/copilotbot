@@ -34,16 +34,17 @@ describe('first-time Open Brain runtime', () => {
     const run = vi.fn(async (_command: string, args: string[]) => { if (args.includes('--pull')) live = true; });
     const runtime = new OpenBrainRuntime({ ...options, run, healthy: async () => live });
     await Promise.all([runtime.start(), runtime.start()]);
-    expect(run).toHaveBeenCalledTimes(5);
+    expect(run).toHaveBeenCalledTimes(6);
     const active = JSON.parse(readFileSync(join(options.data, 'updates.json'), 'utf8')).active.source;
     expect(active).not.toBe(options.source);
     expect(run.mock.calls[2]?.[1]).toContain(join(active, 'docker-compose.yml'));
-    expect(run.mock.calls[3]?.[1]).toEqual(expect.arrayContaining(['up', '--force-recreate', '--wait', 'app']));
+    expect(run.mock.calls[3]?.[1]).toEqual(expect.arrayContaining(['up', '--wait', 'db', 'ollama']));
+    expect(run.mock.calls[4]?.[1]).toEqual(expect.arrayContaining(['up', '--no-deps', '--force-recreate', '--wait', 'app']));
     expect(runtime.status()).toMatchObject({ phase: 'ready', busy: false });
     const env = readFileSync(join(options.data, 'runtime.env'), 'utf8');
     await runtime.start();
     expect(readFileSync(join(options.data, 'runtime.env'), 'utf8')).toBe(env);
-    expect(run).toHaveBeenCalledTimes(5);
+    expect(run).toHaveBeenCalledTimes(6);
   });
   it('does not report success after a failed model download and can retry', async () => {
     let fail = true, live = false;
