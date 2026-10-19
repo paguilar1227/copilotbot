@@ -71,6 +71,10 @@ if (process.env.BRAIN_TEST_MODELS_VOLUME) {
     writeFileSync(file, compose + '\n  shared-models:\n    external: true\n    name: ' + volume + '\n');
   }
 }
+for (const directory of [previous, next, bad]) {
+  const compose = join(directory, 'docker-compose.yml');
+  writeFileSync(compose, readFileSync(compose, 'utf8').replace('LLM_PROVIDER: ${LLM_PROVIDER:-}', 'LLM_PROVIDER: stub'));
+}
 for (const [version, directory] of [['0.1.1', next], ['0.1.2', bad]]) {
   const path = join(workspace, version + '.tar.gz'); await tar.c({ gzip: true, file: path, cwd: directory }, ['.']);
   const bytes = readFileSync(path), id = JSON.parse(readFileSync(join(directory, 'runtime.json'), 'utf8'));

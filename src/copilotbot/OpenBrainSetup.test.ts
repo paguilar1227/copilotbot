@@ -47,3 +47,16 @@ it('offers updates and requires confirmation before restoring a snapshot', async
     expect(api).toHaveBeenCalledWith('/api/copilotbot/open-brain/setup/rollback', { method: 'POST' });
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
+
+it('describes recovery using the existing transaction snapshot', async () => {
+  api.mockResolvedValue({ phase: 'error', managed: true, busy: false, message: 'Recovery required', updates: {
+    current: { version: '0.1.1', revision: 'a' }, checking: false, phase: 'rolling-back', recoveryRequired: true,
+  } });
+  const host = document.createElement('div'); const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(OpenBrainSetup)));
+    await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Recover Open Brain')!.click());
+    expect(host.textContent).toContain('snapshot saved before that update');
+    expect(host.textContent).not.toContain('current state is backed up');
+  } finally { await act(async () => root.unmount()); }
+});

@@ -43,7 +43,7 @@ export function OpenBrainSetup({ compact = false, onRuntimeChange }: { compact?:
       </div>
       {status.updates.available && <p className="text-[12px] text-ink-secondary">A local backup is created before updating. Open Brain writes pause during installation.</p>}
       {confirmRollback && <div role="alert" className="rounded-lg border border-hairline p-3 text-[13px]">
-        <p>Restore Open Brain {status.updates.rollback?.version ?? 'from the last working backup'}{status.updates.rollback ? ' from ' + new Date(status.updates.rollback.createdAt).toLocaleString() : ''}? Notes, tasks and files return to that snapshot. Your current state is backed up before rollback.</p>
+        <p>{status.updates.recoveryRequired ? 'Restore the last working backup to recover the interrupted update? Notes, tasks and files return to the snapshot saved before that update.' : <>Restore Open Brain {status.updates.rollback?.version}{status.updates.rollback ? ' from ' + new Date(status.updates.rollback.createdAt).toLocaleString() : ''}? Notes, tasks and files return to that snapshot. Your current state is backed up before rollback.</>}</p>
         <div className="mt-2 flex gap-2"><button className={button} onClick={() => void action('rollback')}>Restore backup</button><button className={button} onClick={() => setConfirmRollback(false)}>Cancel</button></div>
       </div>}
     </div>}
