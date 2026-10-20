@@ -68,8 +68,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve installer source' }
           git fetch origin $source --depth=1
           if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect installer source' }
-          $allowed = @('copilotbot/windows/verify-update.mjs', '.github/workflows/copilotbot-windows.yml', 'copilotbot/README.md')
-          git diff --name-only $source HEAD | ForEach-Object { if ($_ -notin $allowed) { throw "Installer source changed: $_" } }
+          node copilotbot/windows/verify-reuse.mjs $source
+          if ($LASTEXITCODE -ne 0) { throw 'Installer source or build contract changed' }
           gh run download $env:INSTALLER_RUN_ID -R $env:GITHUB_REPOSITORY -n copilotbot-windows-installer -D release-copilotbot
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download installer artifact' }
           $installer = (Get-ChildItem release-copilotbot/*-windows-x64-setup.exe).FullName
