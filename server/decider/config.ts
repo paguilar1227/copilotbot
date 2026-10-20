@@ -21,7 +21,8 @@ const optionalText = z.string().optional();
  * log's retention. */
 export const deciderConfigSchema = z.object({
   enabled: z.boolean().optional(),
-  provider: z.enum(["jev", "openrouter", "off"]).optional(),
+  provider: z.enum(["jev", "openrouter", "azure", "off"]).optional(),
+  azureDeployment: z.string().trim().refine(value => !/[\r\n\0]/.test(value), 'Use a deployment name without control characters').optional(),
   key: optionalText,
   openrouterKey: optionalText,
   openrouterModel: z
@@ -49,7 +50,9 @@ export const deciderConfigSchema = z.object({
 /** The decision model; see `deciderConfigSchema`. */
 export interface DeciderConfig {
   enabled?: boolean;
-  provider?: "jev" | "openrouter" | "off";
+  provider?: "jev" | "openrouter" | "azure" | "off";
+  /** Azure chat deployment used for structured decisions; shares the Azure connection. */
+  azureDeployment?: string;
   key?: string;
   baseUrl?: string;
   openrouterKey?: string;

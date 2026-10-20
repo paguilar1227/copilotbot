@@ -43,7 +43,7 @@ function ProductHuntCard({ onDone }: { onDone: (action: "upvote" | "not_now" | "
 
 const trialKey = (trial: { state: string; endsAt: number }) => `${trial.state}:${trial.endsAt}`;
 
-export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { quiet?: boolean; viewer?: WelcomeViewer | null; now?: () => number }) {
+export function AppNotices({ quiet = false, viewer = null, now = Date.now, cloudPromotions = false }: { quiet?: boolean; viewer?: WelcomeViewer | null; now?: () => number; cloudPromotions?: boolean }) {
   const { state, dispatch } = useStore();
   const remote = window.ogb?.remoteClient?.active === true;
   const bridge = !remote && localDesktopPage() ? window.ogb?.cloudAccount : undefined;
@@ -79,10 +79,10 @@ export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { q
   }, []);
   const view = bridge ? cloudPlanView(account) : null;
   const record = state.config?.onboarding;
-  const introAllowed = Boolean(bridge) && brandStatus().source !== "file" && organization !== true;
+  const introAllowed = cloudPromotions && Boolean(bridge) && brandStatus().source !== "file" && organization !== true;
   const stage = introStage(record, now());
   const trialDue = cloudTrialNotice(plan);
-  const popupAllowed = Boolean(bridge) && brandStatus().source !== "file" && !viewer?.cloudHome && state.config?.cloudHome !== true;
+  const popupAllowed = cloudPromotions && Boolean(bridge) && brandStatus().source !== "file" && !viewer?.cloudHome && state.config?.cloudHome !== true;
   const popupPending = popupAllowed && !noticeSeen(record, CLOUD_PRO_UPDATE_NOTICE);
   const wantOffer = Boolean(bridge?.offer) && ((introAllowed && view !== null && buyOfferAllowed(view) && stage !== "done") || trialDue?.state === "active"
     || (popupPending && view !== null && buyOfferAllowed(view)));

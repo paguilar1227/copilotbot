@@ -7,7 +7,7 @@ import { withTourFinished } from "@/lib/guided-tour";
 import { setLocale } from "@/lib/i18n";
 import { EMPTY_ONBOARDING, LOCAL_VIEWER, type WelcomeViewer } from "@/lib/onboarding";
 
-const f = vi.hoisted(() => ({ values: [] as unknown[], index: 0, effects: [] as EffectCallback[], state: {} as any, updater: null as any, dispatch: null as any, brand: "default" }));
+const f = vi.hoisted(() => ({ values: [] as unknown[], index: 0, effects: [] as EffectCallback[], state: {} as any, updater: null as any, dispatch: null as any, brand: "default", cloudPromotions: true as boolean | undefined }));
 vi.mock("react", async original => ({ ...await original<typeof import("react")>(),
   useState: (initial: unknown) => { const index = f.index++; if (!(index in f.values)) f.values[index] = typeof initial === "function" ? initial() : initial;
     return [f.values[index], (next: unknown) => { f.values[index] = typeof next === "function" ? (next as (value: unknown) => unknown)(f.values[index]) : next; }]; },
@@ -52,7 +52,7 @@ let bridges: { cloud: Record<string, ReturnType<typeof vi.fn>>; plan: Record<str
 let now: number;
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
-const render = () => { f.index = 0; f.effects = []; return renderToStaticMarkup(createElement(AppNotices, { viewer, now: () => now })); };
+const render = () => { f.index = 0; f.effects = []; return renderToStaticMarkup(createElement(AppNotices, { viewer, now: () => now, cloudPromotions: f.cloudPromotions })); };
 async function settle(rounds = 4) { for (let i = 0; i < rounds; i++) { render(); f.effects.forEach(effect => effect()); await flush(); } return render(); }
 const launch = () => { f.values = []; return settle(); };
 type Node = ReactElement<Record<string, any>>;
@@ -62,7 +62,7 @@ const nodes = (value: ReactNode): Node[] => {
   if (typeof node.type === "function") return nodes((node.type as (props: unknown) => ReactNode)(node.props));
   return [node, ...Children.toArray(node.props.children).flatMap(nodes)];
 };
-const tree = () => { f.index = 0; f.effects = []; return nodes(AppNotices({ viewer, now: () => now })); };
+const tree = () => { f.index = 0; f.effects = []; return nodes(AppNotices({ viewer, now: () => now, cloudPromotions: f.cloudPromotions })); };
 const press = (label: string) => {
   const button = tree().find(node => node.type === "button" && (renderToStaticMarkup(node).includes(`>${label}<`) || node.props["aria-label"] === label));
   expect(button, label).toBeTruthy(); button!.props.onClick();
@@ -73,7 +73,7 @@ const hints = () => f.state.config.onboarding.hintsSeen as string[];
 
 beforeEach(() => {
   vi.clearAllMocks(); vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  storage = new Map(); f.values = []; f.index = 0; f.effects = []; f.updater = null; f.brand = "default"; f.dispatch = vi.fn(); now = NOW;
+  storage = new Map(); f.values = []; f.index = 0; f.effects = []; f.updater = null; f.brand = "default"; f.cloudPromotions = true; f.dispatch = vi.fn(); now = NOW;
   setLocale("en"); viewer = LOCAL_VIEWER; account = signedOut; snapshot = { status: "none" }; offer = TRIAL_OFFER;
   f.state = { connected: true, bots: [], groups: [], instances: [{ instanceId: "claude", snapshot: { state: "available", authenticated: true } }],
     config: { onboarding: { ...EMPTY_ONBOARDING, completedAt: "2026-09-01", version: 1, hintsSeen: withTourFinished(undefined) } } };
@@ -94,6 +94,38 @@ beforeEach(() => {
     addEventListener: vi.fn(), removeEventListener: vi.fn() });
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); setLocale("en"); });
+
+describe("CopilotBot without unsolicited Cloud promotions", () => {
+  beforeEach(() => {
+    f.cloudPromotions = undefined; storage.clear(); storage.set(PRODUCT_HUNT_NOTICE, "1");
+    vi.stubGlobal("document", { activeElement: null, body: null, getElementById: () => null, querySelector: () => null });
+  });
+
+  it("does not offer a trial on first boot, after onboarding, or after a returning user's reload", async () => {
+    f.state.config.onboarding = { ...EMPTY_ONBOARDING };
+    expect(await launch()).toBe("");
+    f.state.config.onboarding = { ...EMPTY_ONBOARDING, completedAt: "2026-10-19", version: 1, hintsSeen: withTourFinished(undefined) };
+    expect(await launch()).toBe("");
+    returning();
+    const html = await launch();
+    expect(html).not.toContain("MausBot Cloud Pro");
+    expect(html).not.toContain(INTRO);
+    expect(html).not.toContain("Start free trial");
+    expect(bridges.cloud.offer).not.toHaveBeenCalled();
+    expect(vi.mocked(track).mock.calls.some(([event]) => event === "cloud_pro_popup" || event === "cloud_card_shown")).toBe(false);
+    expect(storage.has(CLOUD_PRO_UPDATE_NOTICE)).toBe(false);
+    expect(storage.has(CLOUD_INTRO)).toBe(false);
+  });
+
+  it("still shows an existing account's trial-expiry notice", async () => {
+    account = paid({ trial: trial("ending") });
+    snapshot = { status: "paid", trial: trial("ending"), notice: "ending" };
+    const html = await launch();
+    expect(html).toContain("Your free trial ends on");
+    expect(html).not.toContain("MausBot Cloud Pro");
+    expect(html).not.toContain("Start free trial");
+  });
+});
 
 describe("the card after the update", () => {
   it("offers the free trial to someone signed out who has used the app before, in the Admin's numbers, with Start free trial and Show me how", async () => {

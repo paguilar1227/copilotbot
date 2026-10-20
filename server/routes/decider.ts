@@ -26,7 +26,7 @@ export function createDeciderRoutes(deps: DeciderRouteDeps): RouteHandler {
     const draft = typeof body?.key === "string" ? body.key.trim() : "";
     if (draft.length > MAX_KEY_LENGTH) return json(res, 400, { error: "That does not look like an API key." });
     res.setHeader("cache-control", "no-store");
-    const provider = body?.provider === "jev" || body?.provider === "openrouter" ? body.provider : undefined;
+    const provider = body?.provider === "jev" || body?.provider === "openrouter" || body?.provider === 'azure' ? body.provider : undefined;
     if (body?.model !== undefined && (typeof body.model !== "string" || body.model.length > OPENROUTER_MODEL_ID_MAX)) {
       return json(res, 400, { error: "model must be an OpenRouter model id" });
     }

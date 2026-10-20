@@ -96,7 +96,7 @@ describe("DecisionModelSettings", () => {
   it("offers both providers, with Jev selected for an existing install and no model picker", () => {
     const view = render();
     expect(view.provider!.props.value).toBe("jev");
-    expect(optionsOf(view.provider!)).toEqual(["jev", "openrouter"]);
+    expect(optionsOf(view.provider!)).toEqual(["jev", "openrouter", "azure"]);
     expect(view.html).toContain("TypeSafe Jev");
     expect(view.model).toBeUndefined();
     expect(fixture.effects).toHaveLength(1);

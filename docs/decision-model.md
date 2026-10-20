@@ -2,9 +2,10 @@
 
 OpenMausBot can use a fast decision model to pick things for your bots. It
 answers in a few hundred milliseconds for a fraction of a cent. It never does
-the work: the chosen bot still runs its own turn on its own engine. Two
-providers are supported: TypeSafe's [Jev](https://typesafe.ai) (the default)
-and a model of your choice on [OpenRouter](https://openrouter.ai).
+the work: the chosen bot still runs its own turn on its own engine. Three
+providers are supported: TypeSafe's [Jev](https://typesafe.ai) (the default),
+a model of your choice on [OpenRouter](https://openrouter.ai), and an Azure
+Foundry chat deployment.
 
 Everything is in **Settings → Decision model**: the provider, for OpenRouter
 the model, one master switch, that provider's key with **Save** and **Test**,
@@ -13,6 +14,15 @@ switch between them without pasting a key again.
 
 ## Choosing a provider
 
+- **Azure Foundry** reuses the connection in Settings → AI → API keys → Azure
+  Foundry, including Microsoft Entra ID. Select Azure Foundry in Decision
+  model, enter a deployed chat model supporting structured JSON output,
+  save and run Test before enabling it. `gpt-4.1-mini` is a documented
+  example; availability depends on the subscription and region. This uses
+  Azure OpenAI's chat completions API, not a Jev deployment. The resulting
+  probabilities are the chat model's estimates, not calibrated Jev scores.
+  Existing routing deadlines and lead fallback still apply. The Test
+  button makes a small billable request only when clicked.
 - **TypeSafe Jev** is a classifier built for this: it returns calibrated
   probabilities, and the 0.6 threshold below was measured against it.
 - **OpenRouter** routes to one of OpenRouter's own *decisions models* (Jev,

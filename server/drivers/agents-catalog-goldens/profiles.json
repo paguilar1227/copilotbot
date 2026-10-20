@@ -1,8 +1,9 @@
 {
   "default": {
-    "bytes": 55918,
-    "sha256": "9af0172c17de606218c766376e060d48c73857cd14a4b7783d4f4a63cd04940a",
+    "bytes": 56603,
+    "sha256": "81f468312544e747ac990bd4efe117497b1953160fa993a1c0732505e998ac9c",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -43,9 +44,10 @@
     ]
   },
   "voice": {
-    "bytes": 56659,
-    "sha256": "9f8c7c494cf838e63faaa95bdd737a31476d46eb02aa3e9152c4a8de8c89c4a9",
+    "bytes": 57344,
+    "sha256": "5717a4211751c06cdf9c60ce9b2af03e32406c1e9b44fd3e9b70460c08003f69",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -87,9 +89,10 @@
     ]
   },
   "shared": {
-    "bytes": 57663,
-    "sha256": "9be5be8b5ca953308c385418b6f7aaa21e974f1f8a5a176f611ec4ae9e91d622",
+    "bytes": 58348,
+    "sha256": "805b7f7886581235e43edf0c230bd4cae2a8bddc537ff004d092a6181d63f8c0",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -132,9 +135,10 @@
     ]
   },
   "shared+voice": {
-    "bytes": 58404,
-    "sha256": "57734fe5a2e4a9bfb9880854296843ebf4d690f1376b936371be5f55d3cb0b02",
+    "bytes": 59089,
+    "sha256": "05da26b6e9579ee3ad8fa39cb5d6b44dd737a257b0e38b9911033e7ca4da5b7a",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -178,9 +182,10 @@
     ]
   },
   "skills": {
-    "bytes": 58817,
-    "sha256": "cab43935a7291af81a4e8eb019754bf4d99b1e630536747f69a844c12548b630",
+    "bytes": 59502,
+    "sha256": "b1f428d0f562a5223f464045ae25dba3ab9592f969485ab4ddbfa8092063590b",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -223,9 +228,10 @@
     ]
   },
   "skills+voice": {
-    "bytes": 59558,
-    "sha256": "49ed2ba013a03721395f1eba2426ac2c809c6a132371764fc1c887fa93e81d1e",
+    "bytes": 60243,
+    "sha256": "23fbca6da719e1218a0c6e068750aeac0f47b3118abb1251d83e27046869f420",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -269,9 +275,10 @@
     ]
   },
   "skills+shared": {
-    "bytes": 60562,
-    "sha256": "db9687dcf12692e1bf25b715f72425efb82710fa330e4277b5dfe7bb5416f216",
+    "bytes": 61247,
+    "sha256": "a398d8facaccd57ab6cdd4a528bc2d50d51f83f16691ab34ed2ad0715d024fad",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -316,9 +323,10 @@
     ]
   },
   "skills+shared+voice": {
-    "bytes": 61303,
-    "sha256": "77dfe3f8ffd633131e75e4338126aa5b19e45df0fd785d413597b018b64b6e11",
+    "bytes": 61988,
+    "sha256": "05329715f627669fcd7f5c189cd456f194826e38e61a61a269e59e355958dce1",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -364,9 +372,10 @@
     ]
   },
   "non-chief": {
-    "bytes": 46268,
-    "sha256": "2f2a8c7cf64a0335a59c215a5b1d779ba7feb9e25eb20b4fa311e7e3cd0a21e3",
+    "bytes": 46953,
+    "sha256": "64d6af3c4277a3134ead8eecf9ba836102bbf8c24ae768976ffc2d06bb9c3174",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -400,9 +409,10 @@
     ]
   },
   "voice+non-chief": {
-    "bytes": 47009,
-    "sha256": "e0bb5f965df4bbd61a2511c6eb4aa7079120f3136daa17bf93a1e1ee32d1623d",
+    "bytes": 47694,
+    "sha256": "6f7a1bfca3d537281b7a8a87e8e0b674d858691cb11ed48363a0fcf9f29c0805",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -437,9 +447,10 @@
     ]
   },
   "shared+non-chief": {
-    "bytes": 48013,
-    "sha256": "327e1a862821be68a1373e4af54c455b0c637a5ca4f29246020f8cd3f50c6e2e",
+    "bytes": 48698,
+    "sha256": "b8d54774d27bd9795b53adcabcdb5a3bd185e659746017504cacd2d8beaa17d9",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -475,9 +486,10 @@
     ]
   },
   "shared+voice+non-chief": {
-    "bytes": 48754,
-    "sha256": "9778548fa7f5a5a4d79373790f1a950a71c949dc35d712649b419085753ac026",
+    "bytes": 49439,
+    "sha256": "e13c31e447ee0ca1ca29f54c9f6f73e4aaf96bcef517873c3f0262dfc2d8bacd",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -514,9 +526,10 @@
     ]
   },
   "skills+non-chief": {
-    "bytes": 49167,
-    "sha256": "b91e34710d6828217441002d9b9821234aace76f4163be750b492eb5ecbfd226",
+    "bytes": 49852,
+    "sha256": "22f508ab55476cdd433740cbfa924211c72927c938855f950201a3f7e088411a",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -552,9 +565,10 @@
     ]
   },
   "skills+voice+non-chief": {
-    "bytes": 49908,
-    "sha256": "3aa772db07919e416bb9a9d7b8ffc3945274656720730fce39e714bc6ef95120",
+    "bytes": 50593,
+    "sha256": "c8c50f56b83d3f1e6ba1d0469979b902840693c6b9e4d9f0f0fbaaba0105f1c0",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",
@@ -591,9 +605,10 @@
     ]
   },
   "skills+shared+non-chief": {
-    "bytes": 50912,
-    "sha256": "9cef6b5fefa202a6c1be264bf700910542ac88e9e6568e2d1d33cce1b227eece",
+    "bytes": 51597,
+    "sha256": "0f368f9f89076149d9e0bab54d05fc6fd5f1346680569225c3c63598335bde0c",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -631,9 +646,10 @@
     ]
   },
   "skills+shared+voice+non-chief": {
-    "bytes": 51653,
-    "sha256": "57779737d70701459c3913263fb9be0108f8a3e88e8500e6272346fd0a5395c2",
+    "bytes": 52338,
+    "sha256": "41e351029a212476566c209d0060f3180c3d9a2f236285c40ec2f7dd54a17492",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -672,9 +688,10 @@
     ]
   },
   "skills+shared+voice+cloud-home": {
-    "bytes": 60358,
-    "sha256": "26a225b756db07015b7263b376199a3a20ebf872ceb54d5736d61d1ee94876d5",
+    "bytes": 61043,
+    "sha256": "f9f289dc36ea030d40baf2887c7ff552b9a905bcabc1be0cd718df752c0cf098",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -719,9 +736,10 @@
     ]
   },
   "skills+shared+voice+non-chief+cloud-home": {
-    "bytes": 50708,
-    "sha256": "175088a37b57ae22f132a52b430db36dc79e431ff1f4e928f38a80f6094c5fa1",
+    "bytes": 51393,
+    "sha256": "a38bc2b7d19354f672387f06b189986cef111e57c7b02285d33edacd4b314702",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -759,9 +777,10 @@
     ]
   },
   "skills+shared+voice+escalations": {
-    "bytes": 62163,
-    "sha256": "0581a84ea5b2c4d89864204f33d8d46cf41ea5664557d26fbc95f616305b1224",
+    "bytes": 62848,
+    "sha256": "2482a83039ca1cbf37eb6b2847bb839a63f3625249d7ccaab7762435f2400fff",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_shared_computers",
       "shared_computer",
@@ -808,9 +827,10 @@
     ]
   },
   "default+legacy-switches": {
-    "bytes": 55918,
-    "sha256": "9af0172c17de606218c766376e060d48c73857cd14a4b7783d4f4a63cd04940a",
+    "bytes": 56603,
+    "sha256": "81f468312544e747ac990bd4efe117497b1953160fa993a1c0732505e998ac9c",
     "tools": [
+      "get_copilotbot_guide",
       "tool_result_read",
       "list_room_targets",
       "coordinate_bots",

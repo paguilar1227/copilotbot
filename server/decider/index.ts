@@ -1,6 +1,9 @@
 // Never throws into a turn: every failure comes back as { ok: false, reason }. The included relay
 // token goes only to the relay's URL, and only with requests the relay accepts.
 import type { AppConfig } from "../config.ts";
+import { azureSettings, type AzureConfig } from '../../shared/copilotbot.ts';
+import { createAzureDecider } from '../copilotbot/azure-decider.ts';
+import type { AzureRunner } from '../copilotbot/azure-auth.ts';
 import { deciderCredential, type ServiceCredential } from "../included-services.ts";
 import { jevBackend } from "./jev.ts";
 import { appendDeciderLog, stateHash } from "./log.ts";
@@ -22,16 +25,17 @@ const offBackend: { id: "off"; decide(): Promise<BackendResult> } = {
   id: "off",
   decide: async () => ({ ok: false, reason: "disabled" }),
 };
-const BACKENDS: Record<DeciderProvider, DeciderBackend> = { jev: jevBackend, openrouter: openrouterBackend };
+const BACKENDS = { jev: jevBackend, openrouter: openrouterBackend };
 
 type DeciderConfig = NonNullable<AppConfig["decider"]>;
 
 export function deciderProvider(cfg: AppConfig): DeciderProvider | "off" {
   const provider = cfg.decider?.provider ?? "jev";
-  return provider in BACKENDS ? (provider as DeciderProvider) : "off";
+  return provider === 'azure' || provider in BACKENDS ? (provider as DeciderProvider) : "off";
 }
 
 export function deciderModel(cfg: AppConfig): string {
+  if (deciderProvider(cfg) === 'azure') return cfg.decider?.azureDeployment?.trim() || '';
   return cfg.decider?.openrouterModel?.trim() || OPENROUTER_DEFAULT_MODEL;
 }
 
@@ -48,6 +52,8 @@ function deciderAccount(
   draft?: string,
   provider: DeciderProvider | "off" = deciderProvider(cfg),
 ): ServiceCredential | null {
+  if (provider === 'azure') return azureSettings(cfg.azure).configured && cfg.decider?.azureDeployment?.trim()
+    ? { token: '', api: cfg.azure?.endpoint ?? '', included: false } : null;
   if (provider === "openrouter") {
     const token = draft?.trim() || cfg.decider?.openrouterKey?.trim();
     return token ? { token, api: cfg.decider?.openrouterBaseUrl?.trim() || OPENROUTER_DEFAULT_BASE_URL, included: false } : null;
@@ -85,7 +91,7 @@ export function describeDecider(cfg: AppConfig) {
   const provider = deciderProvider(cfg);
   return {
     provider: provider === "off" ? "jev" as const : provider,
-    ...(provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
+    ...(provider === 'azure' ? { model: deciderModel(cfg) } : provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
     configured: Boolean(account),
     ...(account?.included ? { included: true as const } : {}),
     enabled: deciderEnabled(cfg),
@@ -98,9 +104,17 @@ export function deciderSavePatch(
   patch: Partial<DeciderConfig>,
   current: DeciderConfig | undefined,
   included = false,
+  azure?: AzureConfig,
 ): { ok: true; patch: Partial<DeciderConfig> } | { ok: false; error: string } {
   const next: Partial<DeciderConfig> = { ...patch };
   const provider = patch.provider ?? current?.provider ?? "jev";
+  if (provider === 'azure') {
+    if (patch.jobs) next.jobs = { ...current?.jobs, ...patch.jobs };
+    if ((patch.enabled ?? current?.enabled) === true && (!azureSettings(azure).configured || !(patch.azureDeployment ?? current?.azureDeployment)?.trim())) {
+      return { ok: false, error: 'Connect Azure Foundry and choose a chat deployment before enabling Azure decisions.' };
+    }
+    return { ok: true, patch: next };
+  }
   const field = provider === "openrouter" ? "openrouterKey" : "key";
   const includedHere = included && field === "key";
   const activeKey = patch[field];
@@ -152,6 +166,7 @@ export interface DeciderDeps {
   fetch?: typeof fetch;
   dataDir?: string;
   now?: () => number;
+  azureRunner?: AzureRunner;
 }
 
 export interface Decider {
@@ -179,6 +194,7 @@ export interface Decider {
 }
 
 export function createDecider(deps: DeciderDeps): Decider {
+  const backends: Record<DeciderProvider, DeciderBackend> = { ...BACKENDS, azure: createAzureDecider(() => deps.config().azure ?? {}, deps.azureRunner) };
   const fetchImpl = deps.fetch ?? fetch;
   const now = deps.now ?? (() => performance.now());
 
@@ -264,14 +280,14 @@ export function createDecider(deps: DeciderDeps): Decider {
       const refused = gate(cfg, seam);
       if (refused) return { ok: false, reason: refused };
       const provider = deciderProvider(cfg);
-      const backend = provider === "off" ? offBackend : BACKENDS[provider];
+      const backend = provider === "off" ? offBackend : backends[provider];
       const account = deciderAccount(cfg, seam)!;
       // Through the included token, only the exact requests the relay takes.
       if (account.included && !relayAccepts(seam, state, questions)) return { ok: false, reason: "misconfigured" };
       return await call(seam, backend, {
         key: account.token,
         baseUrl: account.api,
-        ...(provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
+        ...(provider === 'azure' ? { model: deciderModel(cfg) } : provider === "openrouter" ? { model: deciderModel(cfg), api: deciderApi(cfg) } : {}),
         state,
         questions,
       }, options);
@@ -306,13 +322,13 @@ export function createDecider(deps: DeciderDeps): Decider {
         const provider = input.provider ?? deciderProvider(cfg);
         const account = deciderAccount(cfg, "keyCheck", input.key, provider);
         if (!account) return { ok: false, reason: "no_key" };
-        const backend = provider === "off" ? offBackend : BACKENDS[provider];
+        const backend = provider === "off" ? offBackend : backends[provider];
         const questions = { answer: { type: "yesno" as const, instructions: KEY_CHECK_QUESTION } };
         if (account.included && !relayAccepts("keyCheck", KEY_CHECK_STATE, questions)) return { ok: false, reason: "misconfigured" };
         return single(await call("keyCheck", backend, {
           key: account.token,
           baseUrl: account.api,
-          ...(provider === "openrouter"
+          ...(provider === 'azure' ? { model: input.model?.trim() || cfg.decider?.azureDeployment?.trim() || '' } : provider === "openrouter"
             ? input.model?.trim()
               ? { model: input.model.trim(), api: input.api ?? "chat" }
               : { model: deciderModel(cfg), api: deciderApi(cfg) }

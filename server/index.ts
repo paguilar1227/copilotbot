@@ -339,6 +339,7 @@ import { ResourcePolicies, configureResourceAccess, skillAllowed } from "./copil
 import { resourceRoutes } from "./copilotbot/resource-routes.ts";
 import { workspaceProjectRoutes } from "./copilotbot/workspace-projects.ts";
 import { rosterRoutes } from "./copilotbot/roster-routes.ts";
+import { installSetupAssistant, setupGuide } from './copilotbot/setup-assistant.ts';
 import { BOT_TEMPLATE_HTTP_MAX_BYTES } from '../shared/template-avatar.ts';
 import { createLiveSession, liveAttachUrl, liveHistoryFrom, LiveSessionError, type LiveBot, type LiveHistoryMessage } from "./live-call.ts";
 import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
@@ -3241,6 +3242,7 @@ for (const pending of startupCatalogs) {
     broadcast({ kind: "config", ...configStatus() });
   }, () => {});
 }
+if (!CLOUD_HOME && !HOSTED_WORKSPACE) installSetupAssistant(store, DATA_DIR);
 store.seedIfEmpty();
 hostedModels?.reconcile(store);
 if (skillsLibraryEnabled(cfg)) {
@@ -14643,6 +14645,16 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
         }
       };
+      if (method === 'GET' && path === '/api/internal/copilotbot-guide') {
+        requireActiveInternalCapability();
+        const engines = registry.instances().map(instance => {
+          const snapshot = registry.lastSnapshot(instance.instanceId);
+          return { instanceId: instance.instanceId, driverKind: instance.driverKind,
+            state: snapshot?.state ?? 'unknown', authenticated: snapshot?.authenticated };
+        });
+        try { return json(res, 200, setupGuide(url.searchParams.get('topic') || 'overview', cfg, engines)); }
+        catch (error) { return json(res, 400, { error: (error as Error).message }); }
+      }
       if (method === 'POST' && path.startsWith('/api/internal/open-brain/')) {
         if (!openBrain) return json(res, 503, { error: 'Open Brain is not configured' });
         const body = await readInternalBody();

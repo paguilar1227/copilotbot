@@ -67,7 +67,7 @@ export interface ConfigStatus {
    * (off while no key is saved). `included`: Cloud Pro's decisions, no key
    * saved. */
   decider?: {
-    provider: "jev" | "openrouter";
+    provider: "jev" | "openrouter" | "azure";
     /** The OpenRouter model in use; present only while OpenRouter is the provider. */
     model?: string;
     configured: boolean;

@@ -1,6 +1,38 @@
 {
   "tools": [
     {
+      "name": "get_copilotbot_guide",
+      "description": "Read the installed CopilotBot setup/help guide and current non-secret provider configuration. Covers Copilot device sign-in, Azure/Entra, Live, TTS, decision models, projects, templates, skills/MCPs, Open Brain and troubleshooting. This reads only; configured status is not an inference test.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "overview",
+              "copilot",
+              "azure",
+              "voice",
+              "decisions",
+              "organization",
+              "resources",
+              "templates",
+              "memory",
+              "maintenance",
+              "troubleshooting"
+            ]
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "tool_result_read",
       "description": "Read a missing portion of an oversized agents-tool result using the saved id and next offset from its notice. Returns at most 16,000 characters, only from this bot in this conversation. Use only when the preview is insufficient; do not load every page by default. Results expire after one hour, on app restart, or under cache pressure. This never reruns the original action.",
       "inputSchema": {

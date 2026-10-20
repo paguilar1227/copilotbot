@@ -177,6 +177,11 @@ const START_THREAD_SELF_ID = "Leave out, or use your own bot ID. For teammates u
 const TOOL_DEFINITIONS = [
   ...OPEN_BRAIN_TOOLS,
   {
+    name: 'get_copilotbot_guide',
+    description: 'Read the installed CopilotBot setup/help guide and current non-secret provider configuration. Covers Copilot device sign-in, Azure/Entra, Live, TTS, decision models, projects, templates, skills/MCPs, Open Brain and troubleshooting. This reads only; configured status is not an inference test.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string', enum: ['overview', 'copilot', 'azure', 'voice', 'decisions', 'organization', 'resources', 'templates', 'memory', 'maintenance', 'troubleshooting'] } } },
+  },
+  {
     name: "create_options_card",
     description:
       "Show the person a native card with 2-6 choices in this Watcher conversation. The card is passive: a click returns the selected words as a reply and never authorizes or performs an external action. Use it for Watcher's review and draft-selection steps, then wait for the person's response.",

@@ -143,7 +143,7 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
       }
       if (!Object.keys(patch).length) return json(res, 400, { error: "nothing to save" });
       if (patch.decider) {
-        const planned = deciderSavePatch(patch.decider, cfg.decider, deciderIncludedHere());
+        const planned = deciderSavePatch(patch.decider, cfg.decider, deciderIncludedHere(), { ...cfg.azure, ...patch.azure });
         if (!planned.ok) return json(res, 400, { error: planned.error });
         patch.decider = planned.patch;
       }

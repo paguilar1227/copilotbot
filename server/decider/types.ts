@@ -1,4 +1,4 @@
-export type DeciderProvider = "jev" | "openrouter";
+export type DeciderProvider = "jev" | "openrouter" | "azure";
 
 /** chat: a chat model asked for strict JSON; decisions: OpenRouter's Decisions API (output modality `decisions`). */
 export type OpenRouterApi = "chat" | "decisions";

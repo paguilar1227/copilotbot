@@ -7,12 +7,13 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { Card, SettingRow, Switch } from "./SettingsPrimitives";
 import { Select } from "./Select";
+import { AzureDecisionSettings } from '@/copilotbot/AzureDecisionSettings';
 
 const KEY_URL = { jev: "https://typesafe.ai", openrouter: "https://openrouter.ai/keys" } as const;
 /** The room decision budget in server/decider/room-routing.ts; slower falls back to the lead. */
 const ROOM_BUDGET_MS = 1_500;
 
-type Provider = "jev" | "openrouter";
+type Provider = "jev" | "openrouter" | "azure";
 type ModelList = { source: "openrouter" | "builtin"; models: Array<{ id: string; name: string; group: "recommended" | "more"; api?: "chat" | "decisions" }> };
 type TestResult = { ok: true; latencyMs: number } | { ok: false; reason: string; status?: number };
 
@@ -64,7 +65,8 @@ const COMING_SOON: LocaleKey[] = ["decider.jobs.browserClicks", "decider.jobs.to
 export function DecisionModelSettings() {
   const { state, dispatch } = useStore();
   const decider = state.config?.decider;
-  const provider: Provider = decider?.provider === "openrouter" ? "openrouter" : "jev";
+  const provider: Provider = decider?.provider === 'azure' ? 'azure' : decider?.provider === "openrouter" ? "openrouter" : "jev";
+  const azure = provider === 'azure';
   const openrouter = provider === "openrouter";
   const configured = decider?.configured ?? false;
   const included = configured && decider?.included === true;
@@ -106,7 +108,7 @@ export function DecisionModelSettings() {
     return () => { cancelled = true; };
   }, [openrouter, models]);
 
-  const choose = (decision: { provider: Provider } | { openrouterModel: string; openrouterApi: "chat" | "decisions" }) => {
+  const choose = (decision: { provider: Provider; enabled?: boolean } | { openrouterModel: string; openrouterApi: "chat" | "decisions" }) => {
     setValue("");
     setVerdict(null);
     void patch(decision);
@@ -165,12 +167,13 @@ export function DecisionModelSettings() {
         <Select className="w-48"
           data-testid="decider-provider"
           value={provider}
-          onChange={(event) => choose({ provider: event.target.value === "openrouter" ? "openrouter" : "jev" })}
+          onChange={(event) => choose(event.target.value === 'azure' ? { provider: 'azure', enabled: false } : { provider: event.target.value === "openrouter" ? "openrouter" : "jev" })}
           disabled={switching || !state.config}
           aria-label={t("decider.provider.label")}
         >
           <option value="jev">{t("decider.provider.jev")}</option>
           <option value="openrouter">{t("decider.provider.openrouter")}</option>
+          <option value="azure">Azure Foundry</option>
         </Select>
       </SettingRow>
       {openrouter && (
@@ -200,12 +203,12 @@ export function DecisionModelSettings() {
         </SettingRow>
       )}
       <SettingRow
-        title={t(openrouter ? "decider.openrouter.master" : "decider.master")}
-        subtitle={configured ? undefined : t("decider.masterNeedsKey")}
+        title={azure ? 'Use Azure for fast decisions' : t(openrouter ? "decider.openrouter.master" : "decider.master")}
+        subtitle={configured ? undefined : azure ? 'Connect Azure Foundry and save a decision deployment first.' : t("decider.masterNeedsKey")}
       >
         <Switch
           data-testid="decider-master"
-          aria-label={t(openrouter ? "decider.openrouter.master" : "decider.master")}
+          aria-label={azure ? 'Use Azure for fast decisions' : t(openrouter ? "decider.openrouter.master" : "decider.master")}
           checked={enabled}
           disabled={!configured || switching || !state.config}
           onClick={() => void patch({ enabled: !enabled })}
@@ -213,7 +216,7 @@ export function DecisionModelSettings() {
         />
       </SettingRow>
 
-      <Card title={t(openrouter ? "decider.openrouter.key.label" : "decider.key.label")}>
+      {azure ? <AzureDecisionSettings /> : <Card title={t(openrouter ? "decider.openrouter.key.label" : "decider.key.label")}>
         <div role="status" className="mb-2 flex items-center gap-2 text-[13px] text-ink-secondary">
           <span className={cn("size-1.5 rounded-full", configured ? "bg-success" : "bg-raised-hover")} />
           <span className={configured ? "text-success" : undefined}>
@@ -259,7 +262,7 @@ export function DecisionModelSettings() {
         {error && <p role="alert" className="mt-1 text-[12px] text-danger">{error}</p>}
         {verdict && <p role="status" className={cn("mt-1 text-[12px]", verdict.ok ? "text-success" : "text-danger")}>{verdict.text}</p>}
         <a
-          href={KEY_URL[provider]}
+          href={KEY_URL[provider === 'openrouter' ? 'openrouter' : 'jev']}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-accent hover:underline"
@@ -267,7 +270,8 @@ export function DecisionModelSettings() {
           {t(openrouter ? "decider.openrouter.key.getKey" : "decider.key.getKey")}
           <ExternalLink size={11} aria-hidden="true" />
         </a>
-      </Card>
+      </Card>}
+      {azure && error && <p role="alert" className="px-4 text-[12px] text-danger">{error}</p>}
 
       <Card title={t("decider.jobs.title")}>
         <ul className="flex flex-col">

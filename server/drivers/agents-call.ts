@@ -621,6 +621,9 @@ export async function callTool(name: string, args: Json, context: ToolCallContex
       text: `${opened}${timing}${approval} Its result will be delivered to this conversation automatically (assignment id: ${assignmentId || "unknown"}). Acknowledge it, mention it to the person as #${threadTitle}, and finish your turn; do not check or wait for it in this turn.`,
     };
   }
+  if (name === 'get_copilotbot_guide') {
+    return { text: JSON.stringify(await api(`/api/internal/copilotbot-guide?topic=${encodeURIComponent(String(args.topic ?? 'overview'))}`)) };
+  }
   if (name === "list_team_setup") {
     return { text: JSON.stringify(await api("/api/internal/team-setup-catalog")) };
   }
