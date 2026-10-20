@@ -1,9 +1,11 @@
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
 import { build, Platform, Arch } from 'electron-builder';
 import { reusedDuckdbResource } from './package-resources.mjs';
+import { COPILOTBOT_UPDATE_FEED } from '../electron/copilotbot-update-feed.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 if (Number(process.versions.node.split('.')[0]) < 24) throw new Error('CopilotBot requires Node.js 24 or newer.');
@@ -19,7 +21,7 @@ const config = parse(readFileSync(join(root, 'electron-builder.yml'), 'utf8'));
 config.appId = 'com.paguilar.copilotbot';
 config.productName = 'CopilotBot';
 config.artifactName = 'CopilotBot-${version}-${arch}.${ext}';
-config.publish = null;
+config.publish = windows ? [COPILOTBOT_UPDATE_FEED] : null;
 config.extraResources = config.extraResources.filter(entry => entry.from !== 'plugins' || existsSync(join(root, 'plugins')));
 config.extraMetadata = {
   name: 'copilotbot', productName: 'CopilotBot', version: JSON.parse(readFileSync(join(root, 'copilotbot/version.json'), 'utf8')).version,
@@ -64,4 +66,18 @@ if (windows) {
 const buildConfig = join(root, 'release-copilotbot', 'build-config.json');
 mkdirSync(join(root, 'release-copilotbot'), { recursive: true });
 writeFileSync(buildConfig, JSON.stringify(config, null, 2));
-await build({ targets: windows ? Platform.WINDOWS.createTarget(['nsis'], Arch.x64) : Platform.MAC.createTarget(['dir'], Arch.arm64), config: buildConfig });
+await build({ targets: windows ? Platform.WINDOWS.createTarget(['nsis'], Arch.x64) : Platform.MAC.createTarget(['dir'], Arch.arm64), config: buildConfig, publish: 'never' });
+if (windows) {
+  const release = join(root, config.directories.output);
+  const feed = parse(readFileSync(join(release, 'win-unpacked/resources/app-update.yml'), 'utf8'));
+  for (const [key, value] of Object.entries(COPILOTBOT_UPDATE_FEED)) {
+    if (feed[key] !== value) throw new Error(`Packaged updater has the wrong ${key}`);
+  }
+  const update = parse(readFileSync(join(release, 'latest.yml'), 'utf8'));
+  const name = `CopilotBot-${config.extraMetadata.version}-windows-x64-setup.exe`;
+  if (update.version !== config.extraMetadata.version || update.files?.[0]?.url !== name) throw new Error('Update metadata does not match the installer');
+  const digest = createHash('sha512');
+  for await (const chunk of createReadStream(join(release, name))) digest.update(chunk);
+  if (update.files[0].sha512 !== digest.digest('base64')) throw new Error('Update metadata has the wrong installer checksum');
+  if (!existsSync(join(release, `${name}.blockmap`))) throw new Error('Installer blockmap is missing');
+}

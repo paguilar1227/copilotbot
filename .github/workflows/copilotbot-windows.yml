@@ -40,7 +40,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
-      - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/plugins/host.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts src/copilotbot/plugins/PluginPage.test.ts src/copilotbot/plugins/ExtensionsPanel.test.ts
+      - run: pnpm exec vitest run electron/updater.test.mjs src/components/SettingsModal.updates.test.ts server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/plugins/host.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts src/copilotbot/plugins/PluginPage.test.ts src/copilotbot/plugins/ExtensionsPanel.test.ts
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
       - name: Regression - WSL setup under Windows PowerShell 5.1
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
@@ -76,6 +76,39 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installed PowerShell cannot start' }
           & "$destination/resources/copilot-cli/copilot.exe" --version
           if ($LASTEXITCODE -ne 0) { throw 'Installed Copilot cannot start' }
+      - name: Verify Check for updates and an in-place upgrade from .16
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
+        shell: pwsh
+        run: |
+          $baseline = Join-Path $env:RUNNER_TEMP 'CopilotBot-baseline.exe'
+          Invoke-WebRequest 'https://github.com/paguilar1227/copilotbot/releases/download/v0.1.112-copilotbot.16/CopilotBot-0.1.112-copilotbot.16-windows-x64-setup.exe' -OutFile $baseline
+          if ((Get-FileHash $baseline -Algorithm SHA256).Hash.ToLower() -ne '27ccdbc7fd9720c43e0c12e601b0d20118d34a13d92a8d941166972ec8ffac44') { throw 'Baseline installer checksum mismatch' }
+          $destination = Join-Path $env:RUNNER_TEMP 'CopilotBot Clean Install'
+          $process = Start-Process $baseline -ArgumentList '/S', "/D=$destination" -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Baseline install failed: $($process.ExitCode)" }
+          node copilotbot/windows/verify-update.mjs --resources="$env:GITHUB_WORKSPACE/release-copilotbot/win-unpacked/resources" --installed="$destination" --output="$env:GITHUB_WORKSPACE/scratch/copilotbot-update-proof"
+          if ($LASTEXITCODE -ne 0) { throw 'In-app update verification failed' }
+      - name: Launch the updated app with the preserved test workspace
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
+        shell: pwsh
+        run: |
+          $proof = "$env:GITHUB_WORKSPACE/scratch/copilotbot-update-proof"
+          $destination = Join-Path $env:RUNNER_TEMP 'CopilotBot Clean Install'
+          $env:OMB_SMOKE_TEST = '1'
+          $env:OMB_DATA_DIR = "$proof/workspace"
+          $process = Start-Process "$destination/CopilotBot.exe" -ArgumentList "--user-data-dir=`"$proof/user-data`"" -PassThru -Wait -RedirectStandardOutput "$proof/relaunch.log" -RedirectStandardError "$proof/relaunch-error.log"
+          if ($process.ExitCode -ne 0) { throw "Updated app exited $($process.ExitCode)" }
+          if (-not (Select-String -Path "$proof/relaunch.log" -Pattern '\[smoke\] renderer-ready' -Quiet)) { throw 'Updated app did not become ready' }
+          if ((Get-Content "$proof/workspace/saved-artifact.txt" -Raw).Trim() -ne 'Existing bot artifact') { throw 'Workspace artifact changed on relaunch' }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.windows_validation)
+        with:
+          name: copilotbot-windows-update-proof
+          path: |
+            scratch/copilotbot-update-proof/*.json
+            scratch/copilotbot-update-proof/*.png
+            scratch/copilotbot-update-proof/*.log
+            scratch/copilotbot-update-proof/logs/
       - name: Checksum the installer
         shell: pwsh
         run: |
@@ -86,6 +119,8 @@ jobs:
           name: copilotbot-windows-installer
           path: |
             release-copilotbot/*-windows-x64-setup.exe
+            release-copilotbot/*-windows-x64-setup.exe.blockmap
+            release-copilotbot/latest.yml
             release-copilotbot/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -142,7 +177,7 @@ jobs:
               exit 0
             fi
           else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Adds the first-run CopilotBot Guide template, Azure Foundry decision models with Entra or API-key authentication, and removes unsolicited trial promotions. Open Brain remains independently installable and updatable. Shared-code tests, the UI build, and the packaged server smoke passed locally. See the workflow run for the selected Windows validation scope. The installer is unsigned."
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Enables Settings → Check for updates on Windows, downloading verified CopilotBot releases and applying them with Restart and install. Existing app data and independently installed Open Brain plugins are preserved. Versions .16 and earlier need this installer once to enable future in-app updates. Windows acceptance covers the real update controls, download, in-place upgrade from .16, preserved files, and launch of the updated app. The installer is unsigned."
           fi
           gh release upload "$tag" installer/* --clobber
           gh release edit "$tag" --draft=false --latest

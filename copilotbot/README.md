@@ -108,6 +108,14 @@ Keep downstream views in `ios/App/CopilotBot/`, wire models in `ios/Sources/Comp
 
 ## Shared Open Brain workspace
 
+### Windows desktop updates
+
+In CopilotBot `.17` and later, open **Settings → General → Check for updates**. The app downloads a newer stable release from this repository and verifies its checksum. Choose **Restart and install** when ready. Normal quit does not apply a pending update. The installer preserves the existing workspace, settings, credentials and independently installed plugins.
+
+Versions `.16` and earlier have automatic updating disabled. Install `.17` or newer once using the [Windows installer](https://github.com/paguilar1227/copilotbot/releases/latest), then use the in-app update flow for subsequent releases. Open Brain retains its own independent plugin update button. Ad-hoc macOS builds still require manual replacement.
+
+The Windows release gate drives the shipped update controls and preload against a local GitHub release fixture, verifies the downloaded installer, upgrades a real `.16` installation in place, checks retained files, and starts the updated application in an isolated workspace.
+
 The **Open Brain** item in the sidebar menu opens the selected conversation's workspace. Each private bot thread and team thread automatically receives its own Open Brain session, identified by a stable key containing the installation and thread IDs. CopilotBot projects are mirrored one for one in Open Brain. Existing and new threads follow their bot or team's current project; moving or renaming a project updates the existing sessions and their contents without replacing session IDs. Threads outside a project are standalone sessions. Empty obsolete integration-owned projects are archived; unrelated content is retained.
 
 Project organization does not merge conversations or change memory ownership. Project recall searches related threads belonging to the same bot or team within the current project. Team captures carry `bot:` and stable `bot-id:` tags for every credited contributor, plus `kind:` and user-supplied topic tags.

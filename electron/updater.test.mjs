@@ -13,10 +13,10 @@ const LOCAL = "http://127.0.0.1:8799";
 const CLOUD = "https://home-7f3k2.fly.dev";
 const OTHER = "https://bots.example.test";
 
-const fixture = vi.hoisted(() => ({ autoUpdater: null, handlers: new Map() }));
+const fixture = vi.hoisted(() => ({ autoUpdater: null, handlers: new Map(), appName: "OpenMausBot" }));
 
 vi.mock("electron", () => ({
-  app: { isPackaged: true, getPath: () => "/unused-updater-test-log" },
+  app: { isPackaged: true, getName: () => fixture.appName, getPath: () => "/unused-updater-test-log" },
   clipboard: { writeText: vi.fn() },
   ipcMain: { handle: (name, handler) => fixture.handlers.set(name, handler) },
 }));
@@ -104,6 +104,7 @@ async function load(pageAllowed) {
     return ["/unused-staged-update.zip"];
   });
   autoUpdater.quitAndInstall = vi.fn();
+  autoUpdater.setFeedURL = vi.fn();
   fixture.autoUpdater = autoUpdater;
   const updater = await import("./updater.mjs");
   updater.registerUpdaterIpc({ pageAllowed });
@@ -115,8 +116,48 @@ const settle = async () => {
 };
 
 beforeEach(() => {
+  fixture.appName = "OpenMausBot";
   localOriginModule.setLocalOrigin(LOCAL);
   vi.useFakeTimers();
+});
+
+it("CopilotBot on Windows checks its own stable releases and installs only on request", async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { ...platform, value: "win32" });
+  fixture.appName = "CopilotBot";
+  try {
+    const local = page(LOCAL);
+    const { updater, autoUpdater, handlers } = await load(() => true);
+    updater.attachUpdaterWindow({ webContents: local.webContents });
+    updater.startUpdater();
+    expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ provider: "github", owner: "paguilar1227", repo: "copilotbot", channel: "latest" });
+    expect(autoUpdater.allowPrerelease).toBe(false);
+    expect(autoUpdater.allowDowngrade).toBe(false);
+    expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
+    await handlers.get("update:check")(local.event);
+    await settle();
+    expect(handlers.get("update:get-state")(local.event)).toMatchObject({ status: "downloaded", version: "2.0.0", installMode: "restart" });
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    handlers.get("update:install")(local.event);
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(true, true);
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+  }
+});
+
+it.each(["darwin", "linux"])("CopilotBot leaves unsupported %s updater disabled", async (os) => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { ...platform, value: os });
+  fixture.appName = "CopilotBot";
+  try {
+    const { updater, autoUpdater, handlers } = await load(() => true);
+    updater.startUpdater();
+    await handlers.get("update:check")({});
+    expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    expect(autoUpdater.setFeedURL).not.toHaveBeenCalled();
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+  }
 });
 afterEach(() => {
   vi.clearAllTimers();

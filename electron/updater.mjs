@@ -12,6 +12,7 @@ import {
 } from "./package-install-command.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
 import { createUpdaterCoordinator } from "./updater-coordinator.mjs";
+import { COPILOTBOT_UPDATE_FEED } from "./copilotbot-update-feed.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -80,7 +81,8 @@ export function attachUpdaterWindow(mainWindow) {
 }
 
 export function startUpdater() {
-  if (!app.isPackaged || app.getName?.().toLowerCase() === "copilotbot") {
+  const copilotbot = app.getName?.().toLowerCase() === "copilotbot";
+  if (!app.isPackaged || (copilotbot && process.platform !== "win32")) {
     updaterCoordinator = null;
     setState({ status: "idle" });
     return;
@@ -95,12 +97,18 @@ export function startUpdater() {
   // The coordinator starts each download itself, so it owns macOS staging and quiet failures.
   autoUpdater.autoDownload = false;
   autoUpdater.logger = updaterLogger();
+  if (copilotbot) {
+    autoUpdater.setFeedURL(COPILOTBOT_UPDATE_FEED);
+    // CopilotBot's suffixed versions are published as stable GitHub releases.
+    autoUpdater.allowPrerelease = false;
+    autoUpdater.allowDowngrade = false;
+  }
 
   // Broadcast the install flavour before the first check so the banner never offers a restart it cannot deliver.
   const packageType = linuxPackageType({ readMarker: (file) => (existsSync(file) ? readFileSync(file, "utf8") : null) });
   const handOff = HAND_OFF_TYPES.has(packageType);
   // On macOS this also starts Squirrel.Mac's native staging at once; a system package is never installed on quit.
-  autoUpdater.autoInstallOnAppQuit = !handOff;
+  autoUpdater.autoInstallOnAppQuit = !handOff && !copilotbot;
   setState({ installMode: handOff ? "handoff" : "restart" });
   updaterCoordinator = createUpdaterCoordinator(autoUpdater, setState, {
     handOffInstall: handOff ? handOffDownloadedPackage(packageType) : null,
