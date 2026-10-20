@@ -16,6 +16,10 @@ const hash = file => createHash('sha512').update(readFileSync(file)).digest('bas
 if (process.versions.electron && process.argv.includes(flag)) {
   const { app, BrowserWindow, session } = await import('electron');
   const [preview, output, resources, installed] = process.argv.slice(process.argv.indexOf(flag) + 1);
+  const progress = value => appendFileSync(join(output, 'native-progress.log'), `${value}\n`);
+  progress('Electron entry loaded');
+  process.on('uncaughtException', error => { progress(error.stack ?? String(error)); app.exit(1); });
+  process.on('unhandledRejection', error => { progress(error?.stack ?? String(error)); app.exit(1); });
   const origin = new URL(preview).origin;
   const target = parse(readFileSync(resolve(resources, '../..', 'latest.yml'), 'utf8'));
   const baseline = JSON.parse(readFileSync(join(installed, 'resources', 'app.asar', 'package.json'), 'utf8')).version;
@@ -26,12 +30,14 @@ if (process.versions.electron && process.argv.includes(flag)) {
   app.setPath('logs', join(output, 'logs'));
   app.getVersion = () => baseline;
   Object.defineProperty(app, 'isPackaged', { value: true });
+  progress('App paths configured');
   const sentinels = [join(output, 'user-data', 'saved-preferences.txt'), ...['saved-artifact.txt', 'bots.json', 'groups.json', 'messages.db'].map(name => join(output, 'workspace', name))];
   const before = sentinels.map(hash);
   const local = createRequire(import.meta.url)('../../electron/local-origin.cjs');
   local.setLocalOrigin(origin);
 
   void app.whenReady().then(async () => {
+    progress('App ready');
     let win;
     try {
       const requests = [];
@@ -49,6 +55,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
       autoUpdater.updateConfigPath = join(resources, 'app-update.yml');
       autoUpdater.installDirectory = installed;
       const shippedUpdater = await import(new URL(`file:///${join(resources, 'app.asar', 'electron', 'updater.mjs').replaceAll('\\', '/')}`));
+      progress('Packaged updater loaded');
       let quitRequested = false;
       app.quit = () => { quitRequested = true; };
       let installDone, installerArguments;
@@ -74,6 +81,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
       const text = () => evaluate('document.body.innerText');
       const click = label => evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)}); if (!button || button.disabled) throw Error('Missing enabled update button'); button.click(); })()`);
       await win.loadURL(preview);
+      progress('Update UI loaded');
       await waitFor(async () => (await text()).includes('Check for updates'));
       await evaluate('window.ogb.updater.onState(state => { window.__updateProof = state; })');
       shippedUpdater.startUpdater();
@@ -82,6 +90,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
       assert.equal(autoUpdater.autoInstallOnAppQuit, false);
       writeFileSync(join(output, 'check-for-updates.png'), (await win.webContents.capturePage()).toPNG());
       await click('Check for updates');
+      progress('Update check requested');
       await waitFor(async () => {
         const value = await text();
         if (await evaluate('window.__updateProof?.status === "error"')) throw new Error(value);
@@ -94,6 +103,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
       assert.ok(requests.some(url => url.endsWith('/latest.yml')));
       writeFileSync(join(output, 'restart-and-install.png'), (await win.webContents.capturePage()).toPNG());
       await click('Restart and install');
+      progress('Update installation requested');
       await waitFor(() => Boolean(installDone && quitRequested));
       await installDone;
       assert.deepEqual(sentinels.map(hash), before);
@@ -115,7 +125,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
       console.log(JSON.stringify(receipt));
       win.destroy();
       app.exit(0);
-    } catch (error) { console.error(error); win?.destroy(); app.exit(1); }
+    } catch (error) { progress(error.stack ?? String(error)); console.error(error); win?.destroy(); app.exit(1); }
   });
 } else {
   assert.equal(process.platform, 'win32', 'Run the native updater acceptance on Windows');
@@ -196,7 +206,8 @@ if (process.versions.electron && process.argv.includes(flag)) {
   try {
     await ui.listen();
     const preview = `${ui.resolvedUrls.local[0]}__update.html`;
-    const child = spawn(createRequire(import.meta.url)('electron'), [fileURLToPath(import.meta.url), flag, preview, output, resources, installed], { stdio: 'inherit', env: isolatedEnv });
+    const child = spawn(createRequire(import.meta.url)('electron'), ['--enable-logging=stderr', fileURLToPath(import.meta.url), flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...isolatedEnv, ELECTRON_ENABLE_LOGGING: '1' } });
+    for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { appendFileSync(join(output, 'native.log'), data); process.stdout.write(data); });
     const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
     assert.equal(code, 0, `Windows updater acceptance failed; evidence: ${output}`);
     const afterServer = await workspaceServer();

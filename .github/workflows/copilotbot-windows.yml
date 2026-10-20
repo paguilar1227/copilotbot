@@ -10,6 +10,10 @@ on:
         description: Publish the built installer when running from main
         type: boolean
         default: false
+      installer_run_id:
+        description: Reuse an installer from a prior run when only verification files changed
+        type: string
+        default: ''
   push:
     paths:
       - 'copilotbot/**'
@@ -26,6 +30,7 @@ on:
       - '.github/workflows/copilotbot-windows.yml'
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
     runs-on: windows-latest
@@ -50,7 +55,27 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         run: pnpm build:cua:win
       - name: Package CopilotBot with independent plugin setup
+        if: inputs.installer_run_id == ''
         run: node copilotbot/package.mjs --win
+      - name: Reuse unchanged installer for native verification
+        if: inputs.installer_run_id != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_RUN_ID: ${{ inputs.installer_run_id }}
+        run: |
+          $source = gh run view $env:INSTALLER_RUN_ID -R $env:GITHUB_REPOSITORY --json headSha --jq .headSha
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve installer source' }
+          git fetch origin $source --depth=1
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect installer source' }
+          $allowed = @('copilotbot/windows/verify-update.mjs', '.github/workflows/copilotbot-windows.yml', 'copilotbot/README.md')
+          git diff --name-only $source HEAD | ForEach-Object { if ($_ -notin $allowed) { throw "Installer source changed: $_" } }
+          gh run download $env:INSTALLER_RUN_ID -R $env:GITHUB_REPOSITORY -n copilotbot-windows-installer -D release-copilotbot
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download installer artifact' }
+          $installer = (Get-ChildItem release-copilotbot/*-windows-x64-setup.exe).FullName
+          $destination = Join-Path $env:GITHUB_WORKSPACE 'release-copilotbot/win-unpacked'
+          $process = Start-Process $installer -ArgumentList '/S', "/D=$destination" -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Installer extraction failed: $($process.ExitCode)" }
       - name: Verify the bundled browser
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release-copilotbot/win-unpacked/resources"
