@@ -73,9 +73,11 @@ jobs:
           gh run download $env:INSTALLER_RUN_ID -R $env:GITHUB_REPOSITORY -n copilotbot-windows-installer -D release-copilotbot
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download installer artifact' }
           $installer = (Get-ChildItem release-copilotbot/*-windows-x64-setup.exe).FullName
-          $destination = Join-Path $env:GITHUB_WORKSPACE 'release-copilotbot/win-unpacked'
+          $destination = Join-Path $env:RUNNER_TEMP 'CopilotBot Artifact Extraction'
           $process = Start-Process $installer -ArgumentList '/S', "/D=$destination" -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw "Installer extraction failed: $($process.ExitCode)" }
+          Copy-Item $destination "$env:GITHUB_WORKSPACE/release-copilotbot/win-unpacked" -Recurse
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE/release-copilotbot/win-unpacked/resources/app-update.yml")) { throw 'Copied updater resources are missing' }
       - name: Verify the bundled browser
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release-copilotbot/win-unpacked/resources"
