@@ -230,7 +230,7 @@ export async function launchVerificationServer(
   boatFixtureApi?: string,
   /** Programmatic web UI qualification against the fixture's static server. */
   staticDir?: string,
-  managedBrain?: { source: string; endpoint: string; feed: string; project: string; dockerBin: string; dockerHost: string },
+  managedBrain?: { source?: string; endpoint: string; feed: string; project: string; dockerBin: string; dockerHost: string },
 ): Promise<VerificationServer> {
   if (boatFixtureApi) {
     if (!/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}$/.test(boatFixtureApi)) {
@@ -283,11 +283,11 @@ export async function launchVerificationServer(
   const log = openSync(logPath, "a", 0o600);
   const childEnv = verificationServerEnvironment(parentEnv, dataDir, port);
   if (managedBrain) {
-    if (!/^copilotbot-update-test-[a-f0-9-]+$/.test(managedBrain.project) || !isAbsolute(managedBrain.source) ||
+    if (!/^copilotbot-update-test-[a-f0-9-]+$/.test(managedBrain.project) || (managedBrain.source !== undefined && !isAbsolute(managedBrain.source)) ||
         !/^http:\/\/127\.0\.0\.1:\d+$/.test(managedBrain.endpoint) || !/^http:\/\/127\.0\.0\.1:\d+\//.test(managedBrain.feed)) {
       throw new ControlOmbError("Managed Open Brain verification requires isolated local test resources");
     }
-    Object.assign(childEnv, { OMB_OPEN_BRAIN_ENABLED: '1', OMB_OPEN_BRAIN_RUNTIME: managedBrain.source,
+    Object.assign(childEnv, { OMB_OPEN_BRAIN_ENABLED: '1', ...(managedBrain.source ? { OMB_OPEN_BRAIN_RUNTIME: managedBrain.source } : {}),
       OMB_OPEN_BRAIN_URL: managedBrain.endpoint, OMB_OPEN_BRAIN_RELEASE_FEED: managedBrain.feed,
       OMB_OPEN_BRAIN_PROJECT: managedBrain.project, DOCKER_HOST: managedBrain.dockerHost,
       PATH: managedBrain.dockerBin + delimiter + childEnv.PATH,

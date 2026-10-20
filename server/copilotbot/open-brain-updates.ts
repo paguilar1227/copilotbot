@@ -10,10 +10,11 @@ interface Snapshot extends BrainVersion { id: string; createdAt: string; databas
 interface Saved { active?: { source: string } & BrainVersion; bundledRevision?: string; rollback?: Snapshot; transaction?: Snapshot }
 export interface BrainUpdateStatus { current?: BrainVersion; available?: BrainVersion; checking: boolean; phase: string; message?: string; rollback?: { version: string; createdAt: string }; recoveryRequired: boolean }
 interface Options {
-  data: string; bundled: string; previous?: string; projectName: string; run: RuntimeRun;
+  data: string; bundled?: string; previous?: string; projectName: string; run: RuntimeRun;
   boot: (source: string, recovery?: boolean) => Promise<void>; changed: () => void;
   maintenance: <T>(action: () => Promise<T>) => Promise<T>;
   feed?: string;
+  retainPlugin?: (source: string) => void;
 }
 async function digest(file: string) {
   const hash = createHash('sha256');
@@ -33,10 +34,18 @@ export class OpenBrainUpdates {
     this.options = options; this.file = join(options.data, 'updates.json');
     this.saved = existsSync(this.file) ? JSON.parse(readFileSync(this.file, 'utf8')) : {};
   }
-  get source() { return this.saved.active?.source ?? this.options.bundled; }
+  get source() { return this.saved.active?.source ?? this.options.bundled ?? ''; }
   get recoveryRequired() { return Boolean(this.saved.transaction); }
   /** Retain the runtime with the data, before an installer can replace its resources. */
   prepare() {
+    if (this.saved.active) {
+      if (!this.version(this.source)) throw new Error('The installed Open Brain runtime is missing. Its data has been left unchanged.');
+      return false;
+    }
+    if (!this.options.bundled) {
+      if (existsSync(join(this.options.data, 'runtime.env'))) throw new Error('The existing Open Brain runtime cannot be identified. Its data has been left unchanged.');
+      return false;
+    }
     const bundled = this.version(this.options.bundled);
     if (!bundled) throw new Error('The bundled Open Brain runtime has no version manifest.');
     if (!this.saved.active) {
@@ -55,20 +64,13 @@ export class OpenBrainUpdates {
       this.save();
     }
     if (!this.version(this.source)) throw new Error('The installed Open Brain runtime is missing. Its data has been left unchanged.');
-    return this.saved.bundledRevision !== bundled.revision && this.newerThanCurrent(bundled);
+    return false;
   }
   private retain(source: string, version: BrainVersion) {
     const destination = join(this.options.data, 'versions', version.revision + '-' + randomUUID());
     mkdirSync(destination, { recursive: true, mode: 0o700 });
     cpSync(source, destination, { recursive: true });
     return destination;
-  }
-  async installBundled() {
-    const version = this.version(this.options.bundled)!;
-    const source = this.retain(this.options.bundled, version);
-    // A failed installer upgrade is recoverable without retrying the same migration on every launch.
-    this.saved.bundledRevision = version.revision; this.save();
-    await this.install(source, version);
   }
   status(): BrainUpdateStatus {
     const current = this.version(this.source), rollback = this.saved.rollback;
@@ -84,6 +86,7 @@ export class OpenBrainUpdates {
     return false;
   }
   private version(source: string): BrainVersion | undefined {
+    if (!source) return undefined;
     const file = join(source, 'runtime.json');
     if (!existsSync(file)) return undefined;
     const value = JSON.parse(readFileSync(file, 'utf8'));
@@ -106,6 +109,7 @@ export class OpenBrainUpdates {
     if (!version) throw new Error('The installed Open Brain version cannot be identified. Update cancelled.');
     const id = randomUUID(), directory = join(this.options.data, 'backups', id);
     mkdirSync(directory, { recursive: true, mode: 0o700 });
+    this.options.retainPlugin?.(this.source);
     cpSync(this.source, join(directory, 'runtime'), { recursive: true });
     cpSync(join(this.options.data, 'runtime.env'), join(directory, 'runtime.env'));
     this.progress('backing-up', 'Saving the Open Brain database, files and previous runtime.');
@@ -155,7 +159,14 @@ export class OpenBrainUpdates {
     let source: string;
     try { source = await downloadBrainRelease(release, join(this.options.data, 'versions')); }
     catch (error) { this.progress('failed', error instanceof Error ? error.message : 'Download failed. The current version is unchanged.'); throw error; }
-    await this.install(source, release);
+    if (!this.source) {
+      if (existsSync(join(this.options.data, 'runtime.env'))) throw new Error('An existing Open Brain installation must be recovered before installing a plugin.');
+      if (!existsSync(join(source, 'plugin/copilotbot/plugin.json'))) throw new Error('This Open Brain release does not include an installable plugin. Choose a newer compatible release.');
+      this.saved.active = { source, version: release.version, revision: release.revision }; this.save();
+      this.progress('installing', 'Installing Open Brain ' + release.version + '.');
+      await this.options.boot(source);
+      this.progress('idle', 'Open Brain ' + release.version + ' is installed.');
+    } else await this.install(source, release);
   }
   private async install(source: string, release: BrainVersion) {
     await this.exclusive(async () => {

@@ -29,6 +29,6 @@ export function PluginPage({ plugin, page }: { plugin: PluginListing; page: Plug
     window.addEventListener('message', listener);
     return () => { abort.abort(); window.removeEventListener('message', listener); };
   }, [channel, plugin.manifest]);
-  if (page.webApp) return <SharedWebApp plugin={plugin} page={page} />;
+  if (page.webApp) return <SharedWebApp key={plugin.manifest.version} plugin={plugin} page={page} />;
   return <iframe ref={frame} title={page.title} onLoad={sendTheme} sandbox="allow-scripts allow-forms" className="min-h-[380px] w-full flex-1 border-0 bg-app" src={`/api/plugins/${plugin.manifest.id}/assets/${page.entry}#channel=${channel}`} />;
 }

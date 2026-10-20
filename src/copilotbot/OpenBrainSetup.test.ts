@@ -35,7 +35,7 @@ it('offers updates and requires confirmation before restoring a snapshot', async
   try {
     await act(async () => root.render(createElement(OpenBrainSetup, { compact: true })));
     const click = async (name: string) => act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === name)!.click());
-    expect(host.textContent).toContain('Installed: 0.1.1');
+    expect(host.textContent).toContain('Installed plugin: 0.1.1');
     await click('Check for updates');
     expect(api).toHaveBeenCalledWith('/api/copilotbot/open-brain/setup/check', { method: 'POST' });
     await click('Update to 0.1.2');
@@ -59,4 +59,36 @@ it('describes recovery using the existing transaction snapshot', async () => {
     expect(host.textContent).toContain('snapshot saved before that update');
     expect(host.textContent).not.toContain('current state is backed up');
   } finally { await act(async () => root.unmount()); }
+});
+
+it('installs the independently released plugin and refreshes an already-open workspace', async () => {
+  const changed = vi.fn(); api.mockClear();
+  api.mockResolvedValue({phase:'not-installed',managed:true,busy:false,updates:{checking:false,phase:'idle',recoveryRequired:false}});
+  const host = document.createElement('div'); const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(OpenBrainSetup, {onRuntimeChange:changed})));
+    expect(host.textContent).toContain('Updates independently of CopilotBot');
+    api.mockResolvedValue({phase:'ready',managed:true,busy:false,updates:{current:{version:'0.1.2',revision:'new'},checking:false,phase:'idle',recoveryRequired:false}});
+    await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Install Open Brain Lite')!.click());
+    expect(api).toHaveBeenCalledWith('/api/copilotbot/open-brain/setup/install', {method:'POST'});
+    expect(host.textContent).toContain('Installed plugin: 0.1.2');
+  } finally { await act(async () => root.unmount()); }
+});
+
+it('refreshes the workspace only after the newly selected plugin finishes installing', async () => {
+  vi.useFakeTimers(); const changed = vi.fn();
+  let state = {phase:'not-installed',managed:true,busy:false,updates:{checking:false,phase:'idle',recoveryRequired:false}} as any;
+  api.mockImplementation(async () => state);
+  const host = document.createElement('div'); const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(OpenBrainSetup,{onRuntimeChange:changed})));
+    state = {...state,phase:'starting',busy:true,updates:{...state.updates,current:{version:'0.1.2',revision:'new'}}};
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(changed).not.toHaveBeenCalled();
+    state = {...state,phase:'ready',busy:false};
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(changed).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(changed).toHaveBeenCalledTimes(1);
+  } finally { await act(async () => root.unmount()); vi.useRealTimers(); }
 });

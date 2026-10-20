@@ -9,6 +9,7 @@ import type { StoredMcpServer } from '../mcp-registry.ts';
 interface Installation { directory: string; enabled: boolean; settings: PluginSettings; disabledSkills?: string[] }
 interface Runtime {
   worker: Worker; status: 'starting' | 'ready' | 'error'; error?: string;
+  ready: Promise<void>;
   abort: AbortController; pending: Map<string, { resolve(value: unknown): void; reject(error: Error): void }>;
 }
 interface Loaded { installation: Installation; manifest: PluginManifest; runtime?: Runtime; error?: string }
@@ -138,6 +139,30 @@ export class PluginHost {
   }
 
   install(source: string): Promise<PluginListing> { return this.change(() => this.installCopy(source)); }
+  replace(source: string, settings: PluginSettings = {}): Promise<PluginListing> {
+    return this.change(async () => {
+      const manifest = readManifest(source);
+      const previous = this.plugins.get(manifest.id);
+      if (previous?.manifest.version === manifest.version && Object.entries(settings).every(([key, value]) => previous.installation.settings[key] === value)) return this.listing(previous);
+      const enabled = previous?.installation.enabled ?? true;
+      if (previous) { await this.stop(previous); previous.installation.enabled = false; }
+      try {
+        await this.installCopy(source);
+        if (Object.keys(settings).length) await this.configureSaved(manifest.id, settings);
+        await this.setEnabled(manifest.id, enabled);
+        await this.get(manifest.id).runtime?.ready;
+        return this.listing(this.get(manifest.id));
+      } catch (error) {
+        const current = this.plugins.get(manifest.id);
+        if (current && current !== previous) await this.stop(current);
+        if (previous) {
+          this.plugins.set(manifest.id, previous); previous.installation.enabled = enabled;
+          this.save(); if (enabled) this.launch(previous); this.publish();
+        } else { this.plugins.delete(manifest.id); this.save(); this.publish(); }
+        throw error;
+      }
+    });
+  }
   private async installCopy(source: string): Promise<PluginListing> {
     if (this.error) throw new Error(this.error);
     if (!source || !isAbsolute(source)) throw new Error('Choose an absolute plugin folder path');
@@ -214,11 +239,16 @@ export class PluginHost {
     const workerPath = this.workerPath ?? new URL(existsSync(new URL('./worker.js', import.meta.url)) ? './worker.js' : './worker.ts', import.meta.url);
     const worker = new Worker(workerPath, { workerData: { entry, commands: plugin.manifest.commands.map(command => command.id), settings: this.listing(plugin).settings }, stdout: true, stderr: true });
     worker.stdout.resume(); worker.stderr.resume();
-    const runtime: Runtime = { worker, status: 'starting', abort: new AbortController(), pending: new Map() };
+    let resolveReady!: () => void;
+    let rejectReady!: (error: Error) => void;
+    const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+    void ready.catch(() => {});
+    const runtime: Runtime = { worker, status: 'starting', ready, abort: new AbortController(), pending: new Map() };
     plugin.runtime = runtime;
     const fail = (error: unknown) => {
       if (plugin.runtime !== runtime) return;
       runtime.status = 'error'; runtime.error = this.safeError(plugin, error); runtime.abort.abort();
+      rejectReady(new Error(runtime.error));
       for (const request of runtime.pending.values()) request.reject(new Error(runtime.error));
       runtime.pending.clear(); this.publish();
     };
@@ -226,7 +256,7 @@ export class PluginHost {
     worker.on('exit', code => { if (plugin.runtime === runtime) fail(new Error(`Plugin stopped (exit ${code}). Disable and enable to restart.`)); });
     worker.on('message', async message => {
       if (plugin.runtime !== runtime) return;
-      if (message.type === 'ready') { runtime.status = 'ready'; this.publish(); }
+      if (message.type === 'ready') { runtime.status = 'ready'; resolveReady(); this.publish(); }
       else if (message.type === 'failed') { fail(new Error(message.error)); void worker.terminate(); }
       else if (message.type === 'result') {
         const request = runtime.pending.get(message.id); runtime.pending.delete(message.id);

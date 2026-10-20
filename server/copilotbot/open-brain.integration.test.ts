@@ -1,3 +1,4 @@
+import { installBrainFixture } from '../testing/install-brain-fixture.ts';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -56,6 +57,7 @@ it.skipIf(!url)('persists real session-owned notes, tasks and files, isolates re
 it.skipIf(!url)('registers new bot and team threads automatically through the actual CopilotBot server', async () => {
   const fixture = await launchVerificationServer({ ...process.env, OMB_OPEN_BRAIN_URL: url });
   try {
+    await installBrainFixture(fixture.info.url, url!);
     const api = async (path: string, method='GET', body?: unknown):Promise<any> => {
       const r=await fetch(fixture.info.url+path,{method,headers:{'Content-Type':'application/json',origin:fixture.info.url},...(body?{body:JSON.stringify(body)}:{})});expect(r.ok,await r.clone().text()).toBe(true);return r.json();
     };
@@ -79,6 +81,7 @@ it.skipIf(!url)('instructs real private and team turns and stores calls through 
   ]) });
   const api = async (path:string, method='GET', body?:unknown):Promise<any> => { const r=await fetch(fixture.info.url+path,{method,headers:{'Content-Type':'application/json',origin:fixture.info.url},...(body?{body:JSON.stringify(body)}:{})});expect(r.ok,await r.clone().text()).toBe(true);return r.json(); };
   try {
+    await installBrainFixture(fixture.info.url, url!);
     const bot=(await api('/api/bots','POST',{name:'Evidence author'})).bot;
     const peer=(await api('/api/bots','POST',{name:'Evidence peer'})).bot;
     const group=(await api('/api/groups','POST',{name:'Evidence team',memberIds:[bot.id,peer.id]})).group;

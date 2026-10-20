@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar';
 import { z } from 'zod';
+import { pluginManifestSchema } from '../../shared/plugins.ts';
 
 export const brainReleaseSchema = z.object({
   schemaVersion: z.literal(1), apiVersion: z.literal(1),
@@ -54,6 +55,14 @@ export async function extractBrainRelease(archive: string, destination: string, 
   if (identity.revision !== release.revision || identity.version !== release.version || identity.apiVersion !== release.apiVersion ||
     !['docker-compose.yml', 'Dockerfile', 'scripts/verify-models.mjs'].every(file => existsSync(join(destination, file)))) {
     throw new Error('Open Brain package identity or required files do not match its release');
+  }
+  const pluginPath = join(destination, 'plugin/copilotbot');
+  if (existsSync(join(pluginPath, 'plugin.json'))) {
+    const plugin = pluginManifestSchema.parse(JSON.parse(readFileSync(join(pluginPath, 'plugin.json'), 'utf8')));
+    if (plugin.id !== 'open-brain-lite' || plugin.version !== release.version ||
+      [plugin.backend, ...plugin.pages.map(page => page.entry), ...plugin.skills.map(skill => skill.file)].some(file => file && !existsSync(join(pluginPath, file)))) {
+      throw new Error('Open Brain plugin identity or required files do not match its release');
+    }
   }
 }
 

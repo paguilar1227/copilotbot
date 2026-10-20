@@ -10,7 +10,7 @@ import { allMcpServers, pluginSkills } from './plugins/contributions.ts';
 import { BOOT_CLOUD_SECRETS } from "./cloud-secrets-boot.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { rm as removeDirectory } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -2073,7 +2073,7 @@ function agentsIntegration(
       OMB_COMMS_TOKEN: token,
       OMB_TURN_DEPTH: String(depth),
       OMB_SKILL_AUTHORING_ENABLED: skillAuthoring ? "1" : "0",
-      OMB_OPEN_BRAIN_ENABLED: openBrain ? "1" : "0",
+      OMB_OPEN_BRAIN_ENABLED: openBrain && brainEnabled() ? "1" : "0",
       OMB_MEMORY_ENABLED: store.bot(botId)?.memoryEnabled === false ? "0" : "1",
       // Only advertises the tools; the routes behind them refuse regardless.
       OMB_SHARED_COMPUTERS_ENABLED: lendingEnabled() ? "1" : "0",
@@ -9175,7 +9175,7 @@ async function startTurn(
         { id: "learn", label: "Skill authoring", text: learnPrompt },
         { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
         { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (integrations.agents ? TEAM_MEMORY_PROMPT : "") },
-        { id: "open-brain", label: "Open Brain", text: openBrain ? await openBrain.prepare(bot, threadId) : "" },
+        { id: "open-brain", label: "Open Brain", text: openBrain && brainEnabled() ? await openBrain.prepare(bot, threadId) : "" },
         // Volatile, so a teammate starting or finishing never changes the stable half.
         teamAvailabilityPart(coordinationPrompt ? sectionPeers : []),
         { id: "recent", label: "Recent work", text: learningPinned ? "" : recentWorkPrompt(recentWork(recentWorkSources(bot), bot, { userName: cfg.profile?.name?.trim() || "User", currentThreadId: threadId, ...recentWorkFilter() })) },
@@ -11223,7 +11223,7 @@ async function runClaimedGroupMemberTurn(
     { id: "recent", label: "Recent work", text: recentWorkPrompt(recentLines) },
     { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
     { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (integrations.agents ? TEAM_MEMORY_PROMPT : "") },
-    { id: "open-brain", label: "Open Brain", text: openBrain ? await openBrain.prepare(bot, threadId) : "" },
+    { id: "open-brain", label: "Open Brain", text: openBrain && brainEnabled() ? await openBrain.prepare(bot, threadId) : "" },
     { id: "memory", label: "Memory", text: roomMemory ? `\n${roomMemory.trim()}` : "" },
     { id: "skills", label: "Skills index", text: workspace ? skillsSystemPrompt(bot.id, skillsHost.conversationSkills(bot, threadId), skillsHost.conversationStartedAt(threadId)) : "" },
     { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) }) },
@@ -13679,23 +13679,34 @@ const cloudMoveRoutes = createCloudMoveRoutes({
 // `workspaceAccess` is assigned at boot, after this line: read it per request.
 let openBrain: OpenBrainIntegration | undefined;
 let brainRuntime: OpenBrainRuntime | undefined;
-const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => broadcast({ kind: 'config', ...configStatus() }), new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url), id => id !== 'open-brain-lite' || !brainRuntime?.unavailableForWrites());
+function brainEnabled() { return appPlugins.list().some(plugin => plugin.manifest.id === 'open-brain-lite' && plugin.enabled); }
+const appPlugins = new PluginHost(join(DATA_DIR, 'plugins'), () => { broadcast({ kind: 'config', ...configStatus() }); if (brainEnabled()) void openBrain?.sync(); }, new URL(import.meta.url.endsWith('.ts') ? './plugins/worker.ts' : './plugins/worker.js', import.meta.url), id => id !== 'open-brain-lite' || !brainRuntime?.unavailableForWrites());
 const bundledPlugins = process.env.OMB_PLUGINS_DIR || fileURLToPath(new URL('../plugins/', import.meta.url));
 if (CLOUD_HOME || HOSTED_WORKSPACE) appPlugins.error = 'App extensions are available in self-hosted workspaces.';
 else await appPlugins.start(discoverPlugins(bundledPlugins));
 if (!CLOUD_HOME && !HOSTED_WORKSPACE && process.env.OMB_OPEN_BRAIN_ENABLED !== '0') {
-  if (process.env.OMB_OPEN_BRAIN_URL) await appPlugins.configure('open-brain-lite', { endpoint: process.env.OMB_OPEN_BRAIN_URL });
-  const firstUse = !existsSync(join(DATA_DIR, 'open-brain', 'state.json'));
-  if (firstUse) await appPlugins.enable('open-brain-lite', true);
-  openBrain = new OpenBrainIntegration(join(DATA_DIR, 'open-brain'), store, (path, options) => appPlugins.requestService('open-brain-lite', 'brain', path, options), () => broadcast({ kind: 'config', ...configStatus() }), () => !brainRuntime?.unavailableForWrites());
-  const runtimeSource = process.env.OMB_OPEN_BRAIN_RUNTIME ?? (process.env.OMB_RESOURCES_PATH ? join(process.env.OMB_RESOURCES_PATH, 'open-brain-runtime') : undefined);
-  const endpoint = String(appPlugins.get('open-brain-lite').installation.settings.endpoint);
+  const installed = appPlugins.list().find(plugin => plugin.manifest.id === 'open-brain-lite');
+  if (process.env.OMB_OPEN_BRAIN_URL && installed) await appPlugins.configure('open-brain-lite', { endpoint: process.env.OMB_OPEN_BRAIN_URL });
+  openBrain = new OpenBrainIntegration(join(DATA_DIR, 'open-brain'), store, (path, options) => appPlugins.requestService('open-brain-lite', 'brain', path, options), () => broadcast({ kind: 'config', ...configStatus() }), () => brainEnabled() && !brainRuntime?.unavailableForWrites());
+  const runtimeSource = process.env.OMB_OPEN_BRAIN_RUNTIME;
+  const endpoint = process.env.OMB_OPEN_BRAIN_URL ?? String(installed?.settings.endpoint ?? 'http://127.0.0.1:3210');
   brainRuntime = new OpenBrainRuntime({ endpoint, source: runtimeSource, data: join(DATA_DIR, 'open-brain'), resources: process.env.OMB_RESOURCES_PATH,
     projectName: process.env.OMB_OPEN_BRAIN_PROJECT, releaseFeed: process.env.OMB_OPEN_BRAIN_RELEASE_FEED,
     maintenance: action => openBrain!.withPaused(action),
+    activate: async source => {
+      const plugin = join(source, 'plugin', 'copilotbot');
+      if (existsSync(join(plugin, 'plugin.json'))) await appPlugins.replace(plugin, { endpoint });
+    },
+    retainPlugin: source => {
+      const destination = join(source, 'plugin', 'copilotbot');
+      if (!existsSync(join(destination, 'plugin.json')) && appPlugins.list().some(plugin => plugin.manifest.id === 'open-brain-lite')) {
+        mkdirSync(destination, { recursive: true });
+        cpSync(appPlugins.get('open-brain-lite').installation.directory, destination, { recursive: true });
+      }
+    },
   });
-  void brainRuntime.start().then(() => openBrain?.sync());
-  store.onChange(change => { if (change.type === 'bot' || change.type === 'group' || change.type === 'sections') void openBrain?.sync(); });
+  void brainRuntime.start().then(() => brainEnabled() ? openBrain?.sync() : undefined);
+  store.onChange(change => { if (brainEnabled() && (change.type === 'bot' || change.type === 'group' || change.type === 'sections')) void openBrain?.sync(); });
 }
 ROUTES.push(async ({ path, url, method, auth, res, json }) => {
   if (!path.startsWith('/api/copilotbot/open-brain')) return PASS;
@@ -13704,7 +13715,8 @@ ROUTES.push(async ({ path, url, method, auth, res, json }) => {
   if (method === 'POST' && path.startsWith('/api/copilotbot/open-brain/setup/')) {
     if (!brainRuntime) return json(res, 409, { error: 'Open Brain is not configured.' });
     const action = path.slice('/api/copilotbot/open-brain/setup/'.length);
-    if (action === 'start') void brainRuntime.start().then(() => openBrain?.sync());
+    if (action === 'install') void brainRuntime.installPlugin().then(() => brainEnabled() ? openBrain?.sync() : undefined);
+    else if (action === 'start') void brainRuntime.start().then(() => brainEnabled() ? openBrain?.sync() : undefined);
     else if (action === 'check') void brainRuntime.checkForUpdates();
     else if (action === 'update') void brainRuntime.update().then(() => openBrain?.sync());
     else if (action === 'rollback') void brainRuntime.rollback().then(() => openBrain?.sync());
@@ -13712,7 +13724,7 @@ ROUTES.push(async ({ path, url, method, auth, res, json }) => {
     else return json(res, 400, { error: 'Unknown setup action' });
     return json(res, 202, brainRuntime.status());
   }
-  if (path === '/api/copilotbot/open-brain' && method === 'GET') return json(res, 200, { ...(openBrain?.status() ?? { configured: false }), link: openBrain?.link(url.searchParams.get('threadId') ?? '') });
+  if (path === '/api/copilotbot/open-brain' && method === 'GET') return json(res, 200, { ...(openBrain?.status() ?? {}), configured: brainEnabled(), link: openBrain?.link(url.searchParams.get('threadId') ?? '') });
   if (path === '/api/copilotbot/open-brain/retry' && method === 'POST') { await openBrain?.sync(); return json(res, 200, openBrain?.status()); }
   return json(res, 404, { error: 'Not found' });
 });

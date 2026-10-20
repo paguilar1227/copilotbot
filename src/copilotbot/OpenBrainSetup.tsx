@@ -8,6 +8,7 @@ export function OpenBrainSetup({ compact = false, onRuntimeChange }: { compact?:
   const [error, setError] = useState('');
   const [confirmRollback, setConfirmRollback] = useState(false);
   const revision = useRef<string | undefined>(undefined);
+  const ready = useRef(false);
   const onChange = useRef(onRuntimeChange);
   useEffect(() => { onChange.current = onRuntimeChange; }, [onRuntimeChange]);
   useEffect(() => {
@@ -15,8 +16,9 @@ export function OpenBrainSetup({ compact = false, onRuntimeChange }: { compact?:
     const refresh = () => api('/api/copilotbot/open-brain/setup')
       .then(value => { if (alive) { setStatus(value); setError('');
         const next = value.updates?.current?.revision;
-        if (next && revision.current && next !== revision.current) onChange.current?.();
-        revision.current = next; } })
+        const usable = value.phase === 'ready' && !value.busy;
+        if (usable && (!ready.current || next !== revision.current)) onChange.current?.();
+        ready.current = usable; revision.current = next; } })
       .catch(() => { if (alive) setError('Could not check Open Brain setup. Reopen this panel to try again.'); });
     void refresh();
     const interval = window.setInterval(() => void refresh(), 2000);
@@ -24,7 +26,7 @@ export function OpenBrainSetup({ compact = false, onRuntimeChange }: { compact?:
   }, []);
   if (!status?.managed && !error) return null;
   if (compact && status?.phase === 'ready' && !status.updates) return null;
-  const action = async (name: 'start' | 'docker' | 'wsl' | 'desktop' | 'check' | 'update' | 'rollback') => {
+  const action = async (name: 'start' | 'install' | 'docker' | 'wsl' | 'desktop' | 'check' | 'update' | 'rollback') => {
     setError(''); setConfirmRollback(false);
     try { setStatus(await api(`/api/copilotbot/open-brain/setup/${name}`, { method: 'POST' })); }
     catch { setError('Setup could not start. Please try again.'); }
@@ -35,10 +37,11 @@ export function OpenBrainSetup({ compact = false, onRuntimeChange }: { compact?:
     <p role="status" className="mt-2 text-[13px] text-ink-secondary">{(status?.phase === 'error' ? status.message : status?.updates?.message ?? status?.message) ?? 'Checking setup…'}</p>
     {error && <p role="alert" className="mt-2 text-[13px] text-danger">{error}</p>}
     {status?.updates && <div className="mt-3 space-y-2">
-      <p className="text-[12px] text-ink-secondary">Installed: {status.updates.current?.version ?? 'Bundled version'}</p>
+      <p className="text-[12px] text-ink-secondary">{status.updates.current ? `${status.phase === 'ready' ? 'Installed plugin' : 'Selected version'}: ${status.updates.current.version}` : 'Plugin not installed'} · Updates independently of CopilotBot</p>
       <div className="flex flex-wrap gap-2">
+        {!status.updates.current && <button className={button} disabled={status.busy} onClick={() => void action('install')}>Install Open Brain Lite</button>}
         <button className={button} disabled={status.busy || status.updates.checking} onClick={() => void action('check')}>{status.updates.checking ? 'Checking…' : 'Check for updates'}</button>
-        {status.updates.available && <button className={button} disabled={status.busy || status.updates.recoveryRequired} onClick={() => void action('update')}>Update to {status.updates.available.version}</button>}
+        {status.updates.current && status.updates.available && <button className={button} disabled={status.busy || status.updates.recoveryRequired} onClick={() => void action('update')}>Update to {status.updates.available.version}</button>}
         {(status.updates.rollback || status.updates.recoveryRequired) && <button className={button} disabled={status.busy} onClick={() => setConfirmRollback(true)}>{status.updates.recoveryRequired ? 'Recover Open Brain' : 'Roll back'}</button>}
       </div>
       {status.updates.available && <p className="text-[12px] text-ink-secondary">A local backup is created before updating. Open Brain writes pause during installation.</p>}
@@ -47,7 +50,7 @@ export function OpenBrainSetup({ compact = false, onRuntimeChange }: { compact?:
         <div className="mt-2 flex gap-2"><button className={button} onClick={() => void action('rollback')}>Restore backup</button><button className={button} onClick={() => setConfirmRollback(false)}>Cancel</button></div>
       </div>}
     </div>}
-    {status?.phase !== 'ready' && <div className="mt-3 flex flex-wrap gap-2">
+    {status?.phase !== 'ready' && status?.phase !== 'not-installed' && <div className="mt-3 flex flex-wrap gap-2">
       {status?.windows && status.managed && <>
         {['docker-stopped', 'restart-required'].includes(status.phase) && <button className={button} disabled={status.busy} onClick={() => void action('desktop')}>Start Docker Desktop</button>}
         {status.phase === 'docker-missing' && <button className={button} disabled={status.busy} onClick={() => void action('docker')}>Install Docker Desktop</button>}

@@ -91,7 +91,7 @@ it('recognizes Windows restart exit codes without calling setup a failure', asyn
 });
 
 
-it.each([false, true])('protects existing data from a failing installer migration (legacy installation: %s)', async (legacy) => {
+it.each([false, true])('keeps the selected plugin version when the desktop installer changes (legacy installation: %s)', async (legacy) => {
   const options = fixture();
   const resources = mkdtempSync(join(tmpdir(), 'brain-resources-'));
   const previous = join(resources, 'open-brain-runtime-previous');
@@ -122,12 +122,10 @@ it.each([false, true])('protects existing data from a failing installer migratio
   writeFileSync(join(options.source, 'runtime.json'), JSON.stringify({ version: '0.1.1', revision: '1'.repeat(40), apiVersion: 1 }));
   const upgraded = new OpenBrainRuntime({ ...options, resources, run, healthy: async () => healthy });
   await upgraded.start();
-  expect(upgraded.status()).toMatchObject({ phase: 'error', updates: { current: { version: '0.1.0' }, recoveryRequired: false } });
+  expect(upgraded.status()).toMatchObject({ phase: 'ready', updates: { current: { version: '0.1.0' }, recoveryRequired: false } });
   expect(database).toBe('original session, note and task'); expect(files).toBe('original artifact bytes');
-  expect(calls.some(args => args.includes('pg_dump'))).toBe(true);
-  expect(calls.some(args => args.includes('pg_restore'))).toBe(true);
-  const recoveryCheck = calls.filter(args => args.includes('scripts/verify-models.mjs')).at(-1)!;
-  expect(recoveryCheck).not.toContain('--pull');
+  expect(calls.some(args => args.includes('pg_dump'))).toBe(false);
+  expect(calls.some(args => args.includes('pg_restore'))).toBe(false);
   // Reopening the same installer must not repeat a failed migration.
   const count = calls.filter(args => args.includes('pg_dump')).length;
   await new OpenBrainRuntime({ ...options, resources, run, healthy: async () => healthy }).start();
@@ -143,4 +141,21 @@ it('refuses to touch legacy data when the previous runtime cannot be identified'
   expect(runtime.status().phase).toBe('error');
   expect(runtime.status().message).toContain('data has been left unchanged');
   expect(run).not.toHaveBeenCalled();
+});
+
+it('starts without a bundled plugin and waits for explicit installation', async () => {
+  const options = fixture(), run = vi.fn();
+  const runtime = new OpenBrainRuntime({ ...options, source: undefined, run, healthy: async () => false });
+  await runtime.start();
+  expect(runtime.status()).toMatchObject({ phase: 'not-installed', managed: true, busy: false });
+  expect(runtime.status().updates?.current).toBeUndefined();
+  expect(run).not.toHaveBeenCalled();
+});
+
+it('does not replace an independently installed adapter during normal startup', async () => {
+  const options = fixture(), activate = vi.fn(); let live = false;
+  const run = async (_command: string, args: string[]) => { if (args.includes('--pull')) live = true; };
+  await new OpenBrainRuntime({...options, run, activate, healthy:async () => live}).start();
+  await new OpenBrainRuntime({...options, run, activate, healthy:async () => live}).start();
+  expect(activate).not.toHaveBeenCalled();
 });

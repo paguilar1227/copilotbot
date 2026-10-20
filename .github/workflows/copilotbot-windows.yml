@@ -10,7 +10,6 @@ on:
       - 'electron/**'
       - 'scripts/prepare-cua-win.mjs'
       - 'scripts/testing/verify-open-brain-updates.ts'
-      - 'scripts/sync-open-brain-release.ts'
       - 'third_party/github-copilot-cli/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -23,22 +22,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - id: brain
-        shell: pwsh
-        run: '"revision=$((Get-Content copilotbot/open-brain-version.json | ConvertFrom-Json).revision)" >> $env:GITHUB_OUTPUT'
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: paguilar1227/open-brain-lite
-          ref: ${{ steps.brain.outputs.revision }}
-          path: open-brain-source
-      - id: legacy
-        shell: pwsh
-        run: '"revision=$((Get-Content copilotbot/open-brain-legacy.json | ConvertFrom-Json).revision)" >> $env:GITHUB_OUTPUT'
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: paguilar1227/open-brain-lite
-          ref: ${{ steps.legacy.outputs.revision }}
-          path: open-brain-legacy-source
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -46,17 +29,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/copilotbot/open-brain-release-sync.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts
+      - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/plugins/host.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts src/copilotbot/plugins/PluginPage.test.ts src/copilotbot/plugins/ExtensionsPanel.test.ts
       - name: Regression - WSL setup under Windows PowerShell 5.1
         shell: powershell
         run: ./copilotbot/windows/setup-dependency.test.ps1
       - name: Regression - extract and run the official Windows CUA archive
         run: pnpm build:cua:win
-      - name: Package one installer with Copilot and Open Brain
+      - name: Package CopilotBot with independent plugin setup
         run: node copilotbot/package.mjs --win
-        env:
-          OPEN_BRAIN_SOURCE: ${{ github.workspace }}/open-brain-source
-          OPEN_BRAIN_LEGACY_SOURCE: ${{ github.workspace }}/open-brain-legacy-source
       - name: Verify the bundled browser
         run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release-copilotbot/win-unpacked/resources"
       - name: Verify the packaged server
@@ -70,9 +50,11 @@ jobs:
           $destination = Join-Path $env:RUNNER_TEMP 'CopilotBot Clean Install'
           $process = Start-Process $installer -ArgumentList '/S', "/D=$destination" -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw "NSIS failed: $($process.ExitCode)" }
-          @('CopilotBot.exe', 'resources/server/index.js', 'resources/ui/index.html', 'resources/copilot-cli/copilot.exe', 'resources/powershell/pwsh.exe', 'resources/licenses/github-copilot-cli-LICENSE.md', 'resources/open-brain-runtime/docker-compose.yml', 'resources/open-brain-runtime-previous/runtime.json', 'resources/copilotbot-setup/setup-dependency.ps1', 'resources/plugins/open-brain-lite/plugin.json') | ForEach-Object {
+          @('CopilotBot.exe', 'resources/server/index.js', 'resources/ui/index.html', 'resources/copilot-cli/copilot.exe', 'resources/powershell/pwsh.exe', 'resources/licenses/github-copilot-cli-LICENSE.md', 'resources/copilotbot-setup/setup-dependency.ps1') | ForEach-Object {
             if (-not (Test-Path (Join-Path $destination $_))) { throw "Missing installed file: $_" }
           }
+          if (Test-Path "$destination/resources/open-brain-runtime") { throw 'Desktop installer must not bundle the plugin runtime' }
+          if (Test-Path "$destination/resources/plugins/open-brain-lite") { throw 'Desktop installer must not bundle the Open Brain extension' }
           & "$destination/resources/powershell/pwsh.exe" -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
           if ($LASTEXITCODE -ne 0) { throw 'Installed PowerShell cannot start' }
           & "$destination/resources/copilot-cli/copilot.exe" --version
@@ -91,12 +73,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - id: brain
-        run: echo "revision=$(node -p "require('./copilotbot/open-brain-version.json').revision")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: paguilar1227/open-brain-lite
-          ref: ${{ steps.brain.outputs.revision }}
+          ref: main
           path: open-brain-source
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -142,7 +122,7 @@ jobs:
               exit 0
             fi
           else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Tested Windows installer with the shared Open Brain runtime, in-app updates, local backups, and rollback. Requires Windows 11 x64 with Docker/WSL. The installer is currently unsigned."
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Tested Windows installer with independent Open Brain plugin installation, updates, backups, and rollback. Requires Windows 11 x64 with Docker/WSL. The installer is currently unsigned."
           fi
           gh release upload "$tag" installer/* --clobber
           gh release edit "$tag" --draft=false --latest

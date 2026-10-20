@@ -20,6 +20,7 @@ config.appId = 'com.paguilar.copilotbot';
 config.productName = 'CopilotBot';
 config.artifactName = 'CopilotBot-${version}-${arch}.${ext}';
 config.publish = null;
+config.extraResources = config.extraResources.filter(entry => entry.from !== 'plugins' || existsSync(join(root, 'plugins')));
 config.extraMetadata = {
   name: 'copilotbot', productName: 'CopilotBot', version: JSON.parse(readFileSync(join(root, 'copilotbot/version.json'), 'utf8')).version,
   homepage: 'https://github.com/paguilar1227/copilotbot',
@@ -37,6 +38,7 @@ if (windows) {
   config.win.target = [{ target: 'nsis', arch: ['x64'] }];
   config.nsis = { ...config.nsis, oneClick: false, allowToChangeInstallationDirectory: true, shortcutName: 'CopilotBot', artifactName: 'CopilotBot-${version}-windows-x64-setup.${ext}', deleteAppDataOnUninstall: false };
   config.extraResources.push(
+    { from: 'third_party/github-copilot-cli/LICENSE.md', to: 'licenses/github-copilot-cli-LICENSE.md' },
     { from: 'dist-native/copilot-win32-x64', to: 'copilot-cli', filter: ['**/*', '!copilot.zip'] },
     { from: 'dist-native/powershell-win32-x64', to: 'powershell', filter: ['**/*', '!powershell.zip'] },
     { from: 'copilotbot/windows/setup-dependency.ps1', to: 'copilotbot-setup/setup-dependency.ps1' },
@@ -59,19 +61,6 @@ if (windows) {
   run('build:speech');
   run('build:cua');
 }
-const brainSource = process.env.OPEN_BRAIN_SOURCE ?? resolve(root, '../open-brain-lite');
-const brainRuntime = join(root, 'release-copilotbot', 'open-brain-runtime');
-if (!existsSync(join(brainSource, 'scripts/export-runtime.mjs'))) throw new Error('Set OPEN_BRAIN_SOURCE to the authoritative Open Brain Lite checkout.');
-const exportedBrain = spawnSync(process.execPath, [join(brainSource, 'scripts/export-runtime.mjs'), brainRuntime], { cwd: brainSource, stdio: 'inherit' });
-if (exportedBrain.status !== 0) throw new Error('Open Brain runtime export failed');
-// The rollback source must survive replacement of installer resources.
-const legacySource = process.env.OPEN_BRAIN_LEGACY_SOURCE;
-if (!legacySource) throw new Error('Set OPEN_BRAIN_LEGACY_SOURCE to the pinned previous Open Brain checkout.');
-const legacyRuntime = join(root, 'release-copilotbot', 'open-brain-runtime-previous');
-const exportedLegacy = spawnSync(process.execPath, [join(legacySource, 'scripts/export-runtime.mjs'), legacyRuntime], { cwd: legacySource, stdio: 'inherit' });
-if (exportedLegacy.status !== 0) throw new Error('Previous Open Brain runtime export failed');
-config.extraResources.push({ from: legacyRuntime, to: 'open-brain-runtime-previous' });
-config.extraResources.push({ from: brainRuntime, to: 'open-brain-runtime' }, { from: 'third_party/github-copilot-cli/LICENSE.md', to: 'licenses/github-copilot-cli-LICENSE.md' });
 const buildConfig = join(root, 'release-copilotbot', 'build-config.json');
 mkdirSync(join(root, 'release-copilotbot'), { recursive: true });
 writeFileSync(buildConfig, JSON.stringify(config, null, 2));

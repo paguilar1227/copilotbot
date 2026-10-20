@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as pause } from 'node:timers/promises';
 import { PluginHost, pluginFile } from './host.ts';
@@ -30,6 +30,21 @@ function sample(id = 'sample', backend = `export function activate(ctx) { return
   writeFileSync(join(directory, 'plugin.json'), JSON.stringify({ format: 'copilotbot.plugin', apiVersion: 1, id, name: id, version: '1.0.0', description: 'Independent extension', backend: 'main.mjs', commands: [{ id: 'echo', title: 'Echo' }, { id: 'read', title: 'Read' }], pages: [{ id: 'main', title: 'Main', entry: 'ui/index.html' }] }));
   writeFileSync(join(directory, 'main.mjs'), backend);
   writeFileSync(join(directory, 'ui/index.html'), '<!doctype html><html><head><title>Example</title></head><body>Example</body></html>');
+  return directory;
+}
+function brainSample() {
+  const directory = sample('open-brain-lite', `export function activate(ctx) { return { commands: {
+    status: () => ctx.services.request('brain', '/health'),
+    'capture-note': input => ctx.services.request('brain', '/api/v1/content', {method:'POST',body:{type:'note',title:input.title,content:input.content,project_ids:[input.projectId]}}),
+  } }; }`);
+  const file = join(directory, 'plugin.json');
+  const manifest = JSON.parse(readFileSync(file, 'utf8'));
+  manifest.commands = [{id:'status',title:'Status'},{id:'capture-note',title:'Capture'}];
+  manifest.settings = {endpoint:{type:'url',label:'Endpoint',default:'http://127.0.0.1:3210'},apiToken:{type:'secret',label:'Token'}};
+  manifest.services = {brain:{urlSetting:'endpoint',tokenSetting:'apiToken'}};
+  manifest.skills = [{name:'open-brain-lite',description:'Brain skill',file:'skill.md'}];
+  writeFileSync(join(directory,'skill.md'),'---\nname: open-brain-lite\ndescription: Brain skill\n---\nUse brain_record.');
+  writeFileSync(file,JSON.stringify(manifest));
   return directory;
 }
 afterEach(async () => { await Promise.all(hosts.splice(0).map(instance => instance.close())); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolveDone => { server.closeAllConnections(); server.close(() => resolveDone()); }))); });
@@ -137,7 +152,7 @@ describe('Open Brain Lite extension and authenticated routes', () => {
     let observed!: () => void;
     const incoming = new Promise<void>(resolveObserved => { observed = resolveObserved; });
     const endpoint = await listen(createServer(() => observed()));
-    const instance = host(); await instance.install(resolve('plugins/open-brain-lite'));
+    const instance = host(); await instance.install(brainSample());
     await instance.configure('open-brain-lite', { endpoint });
     await instance.enable('open-brain-lite', true); await ready(instance, 'open-brain-lite');
     const pending = instance.invoke('open-brain-lite', 'status', null);
@@ -152,7 +167,7 @@ describe('Open Brain Lite extension and authenticated routes', () => {
       requests.push({ path: req.url!, authorization: req.headers.authorization, body: req.method === 'POST' ? await readBody(req) : null });
       json(res, 200, req.url === '/health' ? { ok: true, service: 'open-brain-lite' } : { project: { id: '11111111-1111-4111-8111-111111111111' }, status: 'pending' });
     }));
-    const instance = host(); await instance.install(resolve('plugins/open-brain-lite'));
+    const instance = host(); await instance.install(brainSample());
     await instance.configure('open-brain-lite', { endpoint, apiToken: 'private-test-token' });
     await instance.enable('open-brain-lite', true); await ready(instance, 'open-brain-lite');
     expect(await instance.invoke('open-brain-lite', 'status', null)).toMatchObject({ ok: true });
@@ -198,7 +213,7 @@ describe('Open Brain Lite extension and authenticated routes', () => {
 
   it('lets the library switch disable and re-enable a plugin skill without disabling the plugin', async () => {
     const root = temporary(), instance = host(root);
-    await instance.install(resolve('plugins/open-brain-lite')); await instance.enable('open-brain-lite', true); await ready(instance, 'open-brain-lite');
+    await instance.install(brainSample()); await instance.enable('open-brain-lite', true); await ready(instance, 'open-brain-lite');
     const route = pluginRoutes(instance);
     const url = await listen(createServer(async (req, res) => {
       const parsed = new URL(req.url!, 'http://fixture');
@@ -222,7 +237,7 @@ it('blocks Open Brain commands and direct service requests during maintenance an
   }));
   const instance = new PluginHost(temporary(), () => {}, undefined, id => id !== 'open-brain-lite' || available);
   hosts.push(instance);
-  await instance.install(resolve('plugins/open-brain-lite'));
+  await instance.install(brainSample());
   await instance.configure('open-brain-lite', { endpoint });
   await instance.enable('open-brain-lite', true); await ready(instance, 'open-brain-lite');
   available = false;
@@ -232,4 +247,21 @@ it('blocks Open Brain commands and direct service requests during maintenance an
   available = true;
   await instance.invoke('open-brain-lite', 'capture-note', { projectId: '11111111-1111-4111-8111-111111111111', title: 'Resume', content: 'Now the update is finished' });
   expect(writes).toBe(1);
+});
+
+it('replaces an enabled plugin independently while retaining data and restores the old plugin on activation failure', async () => {
+  const instance = host(), source = sample();
+  await instance.replace(source);
+  await instance.invoke('sample','echo',{saved:'before update'});
+  const file = join(source,'plugin.json'); const manifest = JSON.parse(readFileSync(file,'utf8'));
+  manifest.version='1.0.1'; writeFileSync(file,JSON.stringify(manifest));
+  await instance.replace(source);
+  expect(instance.list()[0]!.manifest.version).toBe('1.0.1');
+  expect(await instance.invoke('sample','read',null)).toEqual({saved:'before update'});
+  manifest.version='1.0.2'; writeFileSync(file,JSON.stringify(manifest));
+  writeFileSync(join(source,'main.mjs'),'throw new Error("broken activation");');
+  await expect(instance.replace(source)).rejects.toThrow('broken activation');
+  await ready(instance,'sample');
+  expect(instance.list()[0]!.manifest.version).toBe('1.0.1');
+  expect(await instance.invoke('sample','read',null)).toEqual({saved:'before update'});
 });

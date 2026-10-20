@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -11,15 +11,21 @@ const servers: Server[] = [];
 afterEach(async () => { await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve())))); });
 function source(path: string, version: string, revision: string) {
   mkdirSync(join(path, 'scripts'), { recursive: true });
+  mkdirSync(join(path, 'plugin/copilotbot'), {recursive:true});
+  writeFileSync(join(path, 'plugin/copilotbot/plugin.json'), JSON.stringify({format:'copilotbot.plugin',apiVersion:1,id:'open-brain-lite',name:'Open Brain Lite',version,description:'Test plugin'}));
   writeFileSync(join(path, 'runtime.json'), JSON.stringify({ version, revision, apiVersion: 1 }));
   writeFileSync(join(path, 'docker-compose.yml'), 'services: {}');
   writeFileSync(join(path, 'Dockerfile'), 'FROM node:24');
   writeFileSync(join(path, 'scripts/verify-models.mjs'), '');
 }
-async function fixture(options: { badHash?: boolean; unsafe?: boolean } = {}) {
+async function fixture(options: { badHash?: boolean; unsafe?: boolean; incompatiblePlugin?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'brain-update-test-')), bundled = join(root, 'bundled'), candidate = join(root, 'candidate'), data = join(root, 'data');
   source(bundled, '0.1.0', '0'.repeat(40)); source(candidate, '0.1.1', '1'.repeat(40));
   mkdirSync(data); writeFileSync(join(data, 'runtime.env'), 'POSTGRES_PASSWORD=fixture');
+  if (options.incompatiblePlugin) {
+    const file = join(candidate, 'plugin/copilotbot/plugin.json');
+    const manifest = JSON.parse(readFileSync(file, 'utf8')); manifest.apiVersion = 2; writeFileSync(file, JSON.stringify(manifest));
+  }
   if (options.unsafe) symlinkSync('/tmp', join(candidate, 'outside'));
   const archive = join(root, 'release.tar.gz'); await tar.c({ cwd: candidate, file: archive, gzip: true }, ['.']);
   const bytes = readFileSync(archive);
@@ -114,4 +120,34 @@ it('queues bot captures throughout failed recovery and replays them only after t
   await brain.sync(); expect(notes).toHaveLength(0); expect(brain.status().pending).toBe(1);
   recovering = false; await brain.sync();
   expect(notes).toHaveLength(1); expect(brain.status().pending).toBe(0);
+});
+
+it('restores the corresponding extension when rolling back a pre-split runtime', async () => {
+  const f = await fixture();
+  rmSync(join(f.config.bundled, 'plugin'), {recursive:true});
+  let pluginVersion = '0.1.0';
+  const updates = new OpenBrainUpdates({...f.config,
+    retainPlugin: source => {
+      const directory = join(source, 'plugin/copilotbot');
+      if (!existsSync(directory)) {
+        mkdirSync(directory, {recursive:true});
+        writeFileSync(join(directory, 'plugin.json'), JSON.stringify({version:pluginVersion}));
+      }
+    },
+    boot: async source => {
+      await f.config.boot(source);
+      pluginVersion = JSON.parse(readFileSync(join(source, 'plugin/copilotbot/plugin.json'), 'utf8')).version;
+    },
+  });
+  await updates.update(); expect(pluginVersion).toBe('0.1.1');
+  await updates.rollback(); expect(pluginVersion).toBe('0.1.0');
+  expect(updates.status().current?.version).toBe(pluginVersion);
+});
+
+it('rejects an incompatible plugin API before changing the current installation', async () => {
+  const f = await fixture({incompatiblePlugin:true});
+  await expect(f.updates.update()).rejects.toThrow();
+  expect(f.calls).toEqual([]);
+  expect(f.memory.version).toBe('0.1.0');
+  expect(existsSync(join(f.data,'backups'))).toBe(false);
 });

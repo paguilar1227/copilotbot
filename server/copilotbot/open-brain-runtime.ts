@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { augmentedPath, resetPathCache } from '../env-path.ts';
 
-export type BrainRuntimePhase = 'checking' | 'unmanaged' | 'docker-missing' | 'docker-stopped' | 'starting' | 'installing' | 'restart-required' | 'ready' | 'error';
+export type BrainRuntimePhase = 'checking' | 'not-installed' | 'unmanaged' | 'docker-missing' | 'docker-stopped' | 'starting' | 'installing' | 'restart-required' | 'ready' | 'error';
 export interface BrainRuntimeStatus {
   phase: BrainRuntimePhase;
   message: string;
@@ -29,6 +29,8 @@ interface RuntimeOptions {
   releaseFeed?: string;
   verify?: () => Promise<void>;
   maintenance?: <T>(action: () => Promise<T>) => Promise<T>;
+  activate?: (source: string) => Promise<void>;
+  retainPlugin?: (source: string) => void;
 }
 
 /** Owns setup progress independently of the capture retry journal. */
@@ -44,8 +46,7 @@ export class OpenBrainRuntime {
     this.options = options;
     this.platform = options.platform ?? process.platform;
     const url = new URL(options.endpoint);
-    const managed = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
-      && Boolean(options.source && existsSync(join(options.source, 'docker-compose.yml')));
+    const managed = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
     this.state = { phase: 'checking', message: 'Checking Open Brain…', managed, windows: this.platform === 'win32', busy: false };
     this.run = options.run ?? ((command, args, cwd, files) => this.execute(command, args, cwd, files));
     this.healthy = options.healthy ?? (async () => {
@@ -54,9 +55,9 @@ export class OpenBrainRuntime {
     });
     if (managed) this.updates = new OpenBrainUpdates({ data: options.data, bundled: options.source!, projectName: options.projectName ?? 'copilotbot-brain', run: this.run,
       previous: options.resources && join(options.resources, 'open-brain-runtime-previous'),
-      boot: (source, recovery) => this.boot(source, recovery), changed: () => options.changed?.(), maintenance: options.maintenance ?? (async action => action()), feed: options.releaseFeed });
+      boot: (source, recovery) => this.boot(source, recovery), changed: () => options.changed?.(), maintenance: options.maintenance ?? (async action => action()), feed: options.releaseFeed, retainPlugin: options.retainPlugin });
   }
-  status(): BrainRuntimeStatus { return { ...this.state, updates: existsSync(join(this.options.data, 'runtime.env')) ? this.updates?.status() : undefined }; }
+  status(): BrainRuntimeStatus { return { ...this.state, updates: this.state.managed ? this.updates?.status() : undefined }; }
   unavailableForWrites() { return Boolean(this.updates?.maintenance || this.updates?.recoveryRequired); }
   private set(phase: BrainRuntimePhase, message: string) {
     this.state = { ...this.state, phase, message };
@@ -76,9 +77,9 @@ export class OpenBrainRuntime {
     else child.stdout!.on('data', log);
     try { await Promise.all(tasks); } catch (error) { child.kill(); throw error; }
   }
-  async checkForUpdates() { if (this.updates && existsSync(join(this.options.data, 'runtime.env')) && !this.state.busy) await this.updates.check(); }
+  async checkForUpdates() { if (this.updates && !this.state.busy) await this.updates.check(); }
   private async changeVersion(action: 'update' | 'rollback') {
-    if (this.pending || !this.updates || !existsSync(join(this.options.data, 'runtime.env'))) return;
+    if (this.pending || !this.updates) return;
     this.state.busy = true;
     this.pending = this.updates[action]().catch(() => {
       this.set('error', this.updates?.recoveryRequired ? 'Recovery is required. Retry rollback before using Open Brain.' : this.updates?.status().message ?? 'Open Brain update failed; see runtime.log.');
@@ -87,6 +88,14 @@ export class OpenBrainRuntime {
   }
   update() { return this.changeVersion('update'); }
   rollback() { return this.changeVersion('rollback'); }
+  async installPlugin() {
+    if (this.pending || !this.state.managed) return;
+    try { await this.run('docker', ['compose', 'version']); }
+    catch { this.set('docker-missing', 'Install Docker Desktop, then install the Open Brain plugin.'); return; }
+    try { await this.run('docker', ['info']); }
+    catch { this.set('docker-stopped', 'Start Docker Desktop, then install the Open Brain plugin.'); return; }
+    await this.update();
+  }
   start(): Promise<void> {
     if (this.pending) return this.pending;
     this.state.busy = true;
@@ -101,23 +110,23 @@ export class OpenBrainRuntime {
     resetPathCache();
     const envFile = join(this.options.data, 'runtime.env');
     const healthy = await this.healthy();
-    if (healthy && (!this.state.managed || !existsSync(envFile))) { this.set('ready', 'Open Brain is ready. Notes, tasks and artifacts stay on this computer.'); return; }
+    if (healthy && (!this.state.managed || (!this.updates?.source && !existsSync(envFile)))) { this.state.managed = false; this.set('ready', 'Connected to an independently managed Open Brain service.'); return; }
     if (!this.state.managed) { this.set('unmanaged', 'The configured Open Brain service is unavailable. Check its address in App extensions.'); return; }
-    const bundledUpdate = this.updates!.prepare();
+    this.updates!.prepare();
     const readyFile = join(this.options.data, 'runtime-ready.json');
     const source = this.updates?.source ?? this.options.source;
+    if (!source) { this.set('not-installed', 'Install the Open Brain Lite plugin to add shared memory, tasks and artifacts. It updates independently of CopilotBot.'); return; }
     const stampFile = source && join(source, 'runtime.json');
     const stamp = stampFile && existsSync(stampFile) ? readFileSync(stampFile, 'utf8') : '';
     const verified = existsSync(readyFile) && readFileSync(readyFile, 'utf8') === stamp;
-    if (healthy && verified && !bundledUpdate) { this.set('ready', 'Open Brain is ready. Notes, tasks and artifacts stay on this computer.'); return; }
+    if (healthy && verified) { this.set('ready', 'Open Brain is ready. Notes, tasks and artifacts stay on this computer.'); return; }
     try { await this.run('docker', ['compose', 'version']); }
     catch { this.set('docker-missing', 'Open Brain needs Docker Desktop. Install it below, then finish the Docker setup window.'); return; }
     try { await this.run('docker', ['info']); }
     catch { this.set('docker-stopped', 'Start Docker Desktop, finish any WSL or restart prompt, then check again.'); return; }
-    if (bundledUpdate) await this.updates!.installBundled();
-    else await this.boot(source!);
+    await this.boot(source, false, false);
   }
-  private async boot(source: string, recovery = false) {
+  private async boot(source: string, recovery = false, activatePlugin = true) {
     const { data, endpoint } = this.options;
     const envFile = join(data, 'runtime.env');
     mkdirSync(data, { recursive: true, mode: 0o700 });
@@ -140,6 +149,7 @@ export class OpenBrainRuntime {
     }
     const stampFile = join(source, 'runtime.json');
     writeFileSync(join(data, 'runtime-ready.json'), existsSync(stampFile) ? readFileSync(stampFile, 'utf8') : '', { mode: 0o600 });
+    if (activatePlugin) await this.options.activate?.(source);
     this.set('ready', 'Open Brain is ready. Notes, tasks and artifacts stay on this computer.');
   }
   async install(dependency: 'docker' | 'wsl' | 'desktop'): Promise<void> {

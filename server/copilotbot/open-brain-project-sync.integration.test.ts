@@ -1,3 +1,4 @@
+import { installBrainFixture } from '../testing/install-brain-fixture.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,6 +29,7 @@ it.skipIf(!url)('mirrors project membership and names automatically while preser
     await expect.poll(async () => Promise.all(threads.map(async thread => (await link(thread))?.projectId))).toEqual(threads.map(() => projectId));
   };
   try {
+    await installBrainFixture(fixture.info.url, url!);
     const solo = (await api('/api/bots', 'POST', { name: 'Solo' })).bot;
     const member = (await api('/api/bots', 'POST', { name: 'Builder', section: 'Delivery' })).bot;
     const room = (await api('/api/groups', 'POST', { name: 'Review', memberIds: [member.id], section: 'Delivery' })).group;

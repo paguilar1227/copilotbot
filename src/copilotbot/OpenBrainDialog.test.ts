@@ -16,7 +16,7 @@ it('binds an already-open workspace to its new session after first-time setup an
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let state: { pending: number; error?: string; link?: { id: string } } = { pending: 3, error: 'fetch failed' };
   api.mockImplementation(async (path: string) => path === '/api/plugins'
-    ? { plugins: [{ manifest: { id: 'open-brain-lite', pages: [{ id: 'workspace', webApp: { module: 'embedded.js' } }] } }] }
+    ? { plugins: [{ enabled: true, manifest: { id: 'open-brain-lite', pages: [{ id: 'workspace', webApp: { module: 'embedded.js' } }] } }] }
     : state);
   const host = document.createElement('div'); document.body.append(host);
   const root = createRoot(host);

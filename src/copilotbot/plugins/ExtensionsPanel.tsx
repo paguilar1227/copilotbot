@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Puzzle, RefreshCw, X } from 'lucide-react';
 import { api } from '@/state/store';
 import type { PluginListing, PluginSettings } from '../../../shared/plugins';
+import { OpenBrainSetup } from '../OpenBrainSetup';
 import { PluginPage } from './PluginPage';
 import { glassPopupFrameStyle } from '@/lib/glass-popup';
 import { useModalDialog } from '@/hooks/use-modal-dialog';
@@ -60,6 +61,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       {error && <p role="alert" className="px-6 py-3 text-sm text-danger">{error}</p>}
       {!plugin ? <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
         <p className="text-sm text-ink-secondary">Extend CopilotBot with new pages, backend commands, skills, and MCP tools. Install only plugins whose code you trust: their backends run local Node code.</p>
+        <OpenBrainSetup onRuntimeChange={() => { void refresh(); }} />
         <input type="search" aria-label="Search extensions" placeholder="Search installed extensions" value={query} onChange={event => setQuery(event.target.value)} className="w-full rounded-lg border border-edge bg-control px-3 py-2" />
         <div className="space-y-3">{plugins.filter(row => `${row.manifest.name} ${row.manifest.description}`.toLowerCase().includes(query.toLowerCase())).map(row => <article key={row.manifest.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-edge p-4">
           <div className="min-w-0 flex-1"><h3 className="font-semibold">{row.manifest.name}</h3><p className="text-sm text-ink-secondary">{row.manifest.description}</p><p className="mt-1 text-xs text-ink-secondary">{row.manifest.version} · {row.status}{row.manifest.mcp.length ? ` · ${row.manifest.mcp.length} MCP` : ''}</p>{row.error && <p role="alert" className="text-sm text-danger">{row.error}</p>}</div>
@@ -76,7 +78,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
           {plugin.manifest.pages.map(row => <button key={row.id} className={button} aria-pressed={tab === `page:${row.id}`} disabled={plugin.status !== 'ready'} onClick={() => setTab(`page:${row.id}`)}>{row.title}</button>)}
           <button className={button} aria-pressed={tab === 'settings'} onClick={() => setTab('settings')}>Settings</button>
         </nav>
-        {page && plugin.status === 'ready' ? <PluginPage key={`${plugin.manifest.id}:${page.id}`} plugin={plugin} page={page} /> : <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><Settings key={plugin.manifest.id} plugin={plugin} saved={refresh} /><p className="mt-6 text-xs text-ink-secondary">MCP tools and skills appear in bot and team access settings while this extension is enabled. Your existing limits still apply.</p></div>}
+        {page && plugin.status === 'ready' ? <PluginPage key={`${plugin.manifest.id}:${page.id}`} plugin={plugin} page={page} /> : <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">{plugin.manifest.id === 'open-brain-lite' && <OpenBrainSetup onRuntimeChange={() => { void refresh(); }} />}<Settings key={plugin.manifest.id} plugin={plugin} saved={refresh} /><p className="mt-6 text-xs text-ink-secondary">MCP tools and skills appear in bot and team access settings while this extension is enabled. Your existing limits still apply.</p></div>}
       </>}
     </section>
   </div>;
