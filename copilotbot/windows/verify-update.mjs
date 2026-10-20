@@ -108,7 +108,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
         probe.allowDowngrade = false;
         assert.equal((await probe.checkForUpdates()).isUpdateAvailable, false);
       }
-      const receipt = { passed: true, sourceVersion: baseline, targetVersion: actual, preservedFiles: sentinels.map((file, index) => ({ file, sha512: before[index] })), requests, installerArguments,
+      const receipt = { installationPassed: true, sourceVersion: baseline, targetVersion: actual, preservedFiles: sentinels.map((file, index) => ({ file, sha512: before[index] })), requests, installerArguments,
         flow: 'Shipped Settings update row and preload → production updater → GitHub provider → verified installer → in-place NSIS install',
         limitation: 'GitHub responses use a local release fixture; relaunch is captured separately by the workflow.' };
       writeFileSync(join(output, 'receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`);
@@ -209,7 +209,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
       assert.equal(note.text, 'Keep this useful note after updating.\n');
       const receiptPath = join(output, 'receipt.json');
       const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
-      writeFileSync(receiptPath, `${JSON.stringify({ ...receipt, persistedWorkspace: { ...preserved, noteRestored: true } }, null, 2)}\n`);
+      writeFileSync(receiptPath, `${JSON.stringify({ ...receipt, passed: true, persistedWorkspace: { ...preserved, noteRestored: true } }, null, 2)}\n`);
     } finally { await afterServer.close(); }
   } finally { await ui.close(); }
 }
