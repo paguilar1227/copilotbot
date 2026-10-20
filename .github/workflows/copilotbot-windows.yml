@@ -39,7 +39,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
       - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/plugins/host.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts src/copilotbot/plugins/PluginPage.test.ts src/copilotbot/plugins/ExtensionsPanel.test.ts
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
       - name: Regression - WSL setup under Windows PowerShell 5.1
         if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         shell: powershell
