@@ -208,6 +208,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
     await ui.listen();
     const preview = `${ui.resolvedUrls.local[0]}__update.html`;
     const bootstrap = join(output, 'native-entry.cjs');
+    writeFileSync(join(output, 'package.json'), JSON.stringify({ name: 'copilotbot-update-fixture', version: '1.0.0', main: 'native-entry.cjs' }));
     writeFileSync(bootstrap, `const fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(join(output, 'native-progress.log'))}, 'Native bootstrap reached\\n');\nconst {app} = require('electron');\nimport(${JSON.stringify(import.meta.url)}).catch(error => {fs.appendFileSync(${JSON.stringify(join(output, 'native-progress.log'))}, String(error.stack || error)); app.exit(1);});\n`);
     const nativeEnv = Object.fromEntries(['PATH', 'SystemRoot', 'ComSpec', 'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'HOMEDRIVE', 'HOMEPATH', 'windir'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
     Object.assign(nativeEnv, { OMB_DATA_DIR: join(output, 'workspace'), OMB_OPEN_BRAIN_ENABLED: '0', ELECTRON_ENABLE_LOGGING: '1' });
@@ -215,7 +216,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
     const nativeVersion = spawnSync(electron, ['--version'], { env: nativeEnv, encoding: 'utf8' });
     writeFileSync(join(output, 'native-launch.json'), JSON.stringify({ executable: electron, versionStatus: nativeVersion.status, versionOutput: nativeVersion.stdout, versionError: nativeVersion.stderr, defaultAppExists: existsSync(join(dirname(electron), 'resources', 'default_app.asar')), bootstrapExists: existsSync(bootstrap) }, null, 2));
     assert.equal(nativeVersion.status, 0, 'Native Electron version probe failed');
-    const child = spawn(electron, ['--no-sandbox', '--disable-gpu', '--enable-logging=stderr', bootstrap, flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: nativeEnv });
+    const child = spawn(electron, ['--no-sandbox', '--disable-gpu', '--enable-logging=stderr', output, flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: nativeEnv });
     for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { appendFileSync(join(output, 'native.log'), data); process.stdout.write(data); });
     const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
     assert.equal(code, 0, `Windows updater acceptance failed; evidence: ${output}`);
