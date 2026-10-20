@@ -9,6 +9,7 @@ on:
       - 'shared/**'
       - 'electron/**'
       - 'scripts/prepare-cua-win.mjs'
+      - 'scripts/smoke-packaged-server.mjs'
       - 'scripts/testing/verify-open-brain-updates.ts'
       - 'third_party/github-copilot-cli/**'
       - 'package.json'

@@ -143,7 +143,7 @@ if (listening) {
       return value;
     };
     const initial = await request('/api/plugins');
-    assert.equal(initial.plugins.find(plugin => plugin.manifest.id === 'open-brain-lite')?.enabled, false);
+    assert.equal(initial.plugins.some(plugin => plugin.manifest.id === 'open-brain-lite'), false);
     await request('/api/plugins/install', 'POST', { directory: join(staging, 'plugins', 'examples', 'project-board'), trust: true });
     await request('/api/plugins/project-board/enable', 'PUT', { enabled: true });
     let ready;
