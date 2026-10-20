@@ -1,6 +1,15 @@
 name: CopilotBot Windows installer
 on:
   workflow_dispatch:
+    inputs:
+      windows_validation:
+        description: Run Windows-specific installation and runtime checks
+        type: boolean
+        default: true
+      publish:
+        description: Publish the built installer when running from main
+        type: boolean
+        default: false
   push:
     paths:
       - 'copilotbot/**'
@@ -32,19 +41,24 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm exec vitest run server/copilotbot/open-brain-runtime.test.ts server/copilotbot/open-brain-updates.test.ts server/plugins/host.test.ts src/copilotbot/OpenBrainSetup.test.ts src/copilotbot/OpenBrainDialog.test.ts src/copilotbot/plugins/PluginPage.test.ts src/copilotbot/plugins/ExtensionsPanel.test.ts
       - name: Regression - WSL setup under Windows PowerShell 5.1
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         shell: powershell
         run: ./copilotbot/windows/setup-dependency.test.ps1
       - name: Regression - extract and run the official Windows CUA archive
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         run: pnpm build:cua:win
       - name: Package CopilotBot with independent plugin setup
         run: node copilotbot/package.mjs --win
       - name: Verify the bundled browser
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release-copilotbot/win-unpacked/resources"
       - name: Verify the packaged server
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         run: node scripts/smoke-packaged-server.mjs --browser-bundle "${{ github.workspace }}/release-copilotbot/win-unpacked/resources/browser-engine"
         env:
           OMB_SMOKE_DIST: ${{ github.workspace }}/release-copilotbot/win-unpacked/resources/server
       - name: Install in a clean app directory and verify its shipped resources
+        if: github.event_name != 'workflow_dispatch' || inputs.windows_validation
         shell: pwsh
         run: |
           $installer = (Get-ChildItem release-copilotbot/*-windows-x64-setup.exe).FullName
@@ -60,7 +74,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installed PowerShell cannot start' }
           & "$destination/resources/copilot-cli/copilot.exe" --version
           if ($LASTEXITCODE -ne 0) { throw 'Installed Copilot cannot start' }
-          Get-FileHash $installer -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content release-copilotbot/SHA256SUMS.txt
+      - name: Checksum the installer
+        shell: pwsh
+        run: |
+          Get-ChildItem release-copilotbot/*-windows-x64-setup.exe | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content release-copilotbot/SHA256SUMS.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -97,7 +114,7 @@ jobs:
           path: scratch/open-brain-update-proof
 
   publish:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: [build, update-acceptance]
     concurrency:
       group: copilotbot-installer-publish
@@ -123,7 +140,7 @@ jobs:
               exit 0
             fi
           else
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Tested Windows installer with independent Open Brain plugin installation, updates, backups, and rollback. Requires Windows 11 x64 with Docker/WSL. The installer is currently unsigned."
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "CopilotBot $version" --notes "Adds the first-run CopilotBot Guide template, Azure Foundry decision models with Entra or API-key authentication, and removes unsolicited trial promotions. Open Brain remains independently installable and updatable. Shared-code tests, the UI build, and the packaged server smoke passed locally. See the workflow run for the selected Windows validation scope. The installer is unsigned."
           fi
           gh release upload "$tag" installer/* --clobber
           gh release edit "$tag" --draft=false --latest
