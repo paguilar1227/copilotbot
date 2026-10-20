@@ -215,7 +215,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
     const nativeVersion = spawnSync(electron, ['--version'], { env: nativeEnv, encoding: 'utf8' });
     writeFileSync(join(output, 'native-launch.json'), JSON.stringify({ executable: electron, versionStatus: nativeVersion.status, versionOutput: nativeVersion.stdout, versionError: nativeVersion.stderr, defaultAppExists: existsSync(join(dirname(electron), 'resources', 'default_app.asar')), bootstrapExists: existsSync(bootstrap) }, null, 2));
     assert.equal(nativeVersion.status, 0, 'Native Electron version probe failed');
-    const child = spawn(electron, ['--enable-logging=stderr', bootstrap, flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: nativeEnv });
+    const child = spawn(electron, ['--no-sandbox', '--disable-gpu', '--enable-logging=stderr', bootstrap, flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: nativeEnv });
     for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { appendFileSync(join(output, 'native.log'), data); process.stdout.write(data); });
     const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
     assert.equal(code, 0, `Windows updater acceptance failed; evidence: ${output}`);
