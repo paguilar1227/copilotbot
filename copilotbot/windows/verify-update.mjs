@@ -28,6 +28,7 @@ if (process.versions.electron && process.argv.includes(flag)) {
   app.setPath('userData', join(output, 'user-data'));
   app.setPath('sessionData', join(output, 'user-data'));
   app.setPath('logs', join(output, 'logs'));
+  process.env.LOCALAPPDATA = join(output, 'user-data');
   app.getVersion = () => baseline;
   Object.defineProperty(app, 'isPackaged', { value: true });
   progress('App paths configured');
@@ -206,7 +207,11 @@ if (process.versions.electron && process.argv.includes(flag)) {
   try {
     await ui.listen();
     const preview = `${ui.resolvedUrls.local[0]}__update.html`;
-    const child = spawn(createRequire(import.meta.url)('electron'), ['--enable-logging=stderr', fileURLToPath(import.meta.url), flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...isolatedEnv, ELECTRON_ENABLE_LOGGING: '1' } });
+    const bootstrap = join(output, 'native-entry.cjs');
+    writeFileSync(bootstrap, `const fs = require('node:fs');\nconst {app} = require('electron');\nfs.appendFileSync(${JSON.stringify(join(output, 'native-progress.log'))}, 'Native bootstrap reached\\n');\nimport(${JSON.stringify(import.meta.url)}).catch(error => {fs.appendFileSync(${JSON.stringify(join(output, 'native-progress.log'))}, String(error.stack || error)); app.exit(1);});\n`);
+    const nativeEnv = { ...process.env, OMB_DATA_DIR: join(output, 'workspace'), OMB_OPEN_BRAIN_ENABLED: '0', ELECTRON_ENABLE_LOGGING: '1' };
+    delete nativeEnv.ELECTRON_RUN_AS_NODE;
+    const child = spawn(createRequire(import.meta.url)('electron'), ['--enable-logging=stderr', bootstrap, flag, preview, output, resources, installed], { stdio: ['ignore', 'pipe', 'pipe'], env: nativeEnv });
     for (const stream of [child.stdout, child.stderr]) stream.on('data', data => { appendFileSync(join(output, 'native.log'), data); process.stdout.write(data); });
     const code = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', resolveExit); });
     assert.equal(code, 0, `Windows updater acceptance failed; evidence: ${output}`);
