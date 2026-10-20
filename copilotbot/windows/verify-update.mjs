@@ -132,7 +132,8 @@ if (process.versions.electron && process.argv.includes(flag)) {
   for (const folder of ['home', 'user-data', 'workspace', 'logs']) mkdirSync(join(output, folder), { recursive: true });
   writeFileSync(join(output, 'user-data', 'saved-preferences.txt'), 'Existing desktop preferences\n');
   writeFileSync(join(output, 'workspace', 'saved-artifact.txt'), 'Existing bot artifact\n');
-  const isolatedEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '', HOME: join(output, 'home'), USERPROFILE: join(output, 'home'), APPDATA: join(output, 'user-data'), LOCALAPPDATA: join(output, 'user-data'), OMB_DATA_DIR: join(output, 'workspace'), OMB_OPEN_BRAIN_ENABLED: '0' };
+  const isolatedEnv = { ...process.env, HOME: join(output, 'home'), USERPROFILE: join(output, 'home'), APPDATA: join(output, 'user-data'), LOCALAPPDATA: join(output, 'user-data'), OMB_DATA_DIR: join(output, 'workspace'), OMB_OPEN_BRAIN_ENABLED: '0' };
+  delete isolatedEnv.ELECTRON_RUN_AS_NODE;
   const workspaceServer = async () => {
     const { createServer: socketServer } = await import('node:net');
     const socket = socketServer();
